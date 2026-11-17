@@ -1,0 +1,771 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Pferdedecken-Monitor</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap">
+<style>
+  /* Layout: ein ruhiger Instrumenten-Bildschirm. Erst die Kennzahlen, dann die Verläufe, ganz unten die Datenverwaltung. */
+  :root {
+    --font-text: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --font-head: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+    --bg: #f5f8f6;
+    --surface: #ffffff;
+    --ink: #15201b;
+    --muted: #55655e;
+    --line: #d5ddd9;
+    --soft: #e3eae6;
+    --accent: #1d5c48;
+    --accent-ink: #ffffff;
+    --c-temp: #c94f17;
+    --c-dew: #2563a8;
+    --c-rh: #17806a;
+    --ok: #17703f;     --ok-bg: #dcf3e6;
+    --warn: #8f4a07;   --warn-bg: #fcefd6;
+    --bad: #a8261b;    --bad-bg: #fce5e2;
+    --hi: #9a3b0c;     --hi-bg: #fde3d3;   /* höchster Wert */
+    --lo: #1c4f94;     --lo-bg: #dbe9fb;   /* niedrigster Wert */
+    color-scheme: light;   /* bewusst nur helles Layout */
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font-family: var(--font-text); font-size: 15px; line-height: 1.5; -webkit-text-size-adjust: 100%;
+    padding-block: 20px 40px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  .wrap { max-width: 980px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+  h1, h2 { font-family: var(--font-head); font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+  h1 { font-size: 26px; line-height: 1.15; }
+  h2 { font-size: 16px; }
+  .sub { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+
+  header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 16px; }
+  header > div { min-width: 0; }
+
+  .btn {
+    font: inherit; font-weight: 500; color: var(--ink); background: var(--surface);
+    border: 1px solid var(--line); border-radius: 8px; padding: 9px 14px; cursor: pointer; min-height: 40px;
+  }
+  .btn:hover { border-color: var(--muted); }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn:disabled { opacity: .55; cursor: default; }
+  .btn.danger { color: var(--bad); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .notice { border-radius: 8px; padding: 10px 14px; background: var(--warn-bg); color: var(--warn); font-size: 14px; }
+  .notice.bad { background: var(--bad-bg); color: var(--bad); }
+
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tab {
+    font: inherit; font-weight: 500; color: var(--muted); background: transparent; border: 1px solid var(--line);
+    border-radius: 999px; padding: 7px 16px; cursor: pointer; min-height: 38px;
+  }
+  .tab[aria-selected="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+
+  .demo { border: 1px dashed var(--muted); border-radius: 8px; padding: 8px 12px; color: var(--muted); font-size: 13px; }
+
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+  .tile { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+  .tile .lab { font-size: 12px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .tile .val { font-family: var(--font-head); font-weight: 600; font-size: 32px; line-height: 1.15; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .tile .val small { font-size: 16px; font-weight: 500; color: var(--muted); margin-left: 2px; }
+  .tile .note { font-size: 12.5px; color: var(--muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .tile.t .val { color: var(--c-temp); }
+  .tile.h .val { color: var(--c-rh); }
+  .tile.d .val { color: var(--c-dew); }
+  .pill { display: inline-block; font-weight: 600; font-size: 14px; border-radius: 999px; padding: 3px 12px; margin-top: 8px; }
+  .pill.ok { background: var(--ok-bg); color: var(--ok); }
+  .pill.warn { background: var(--warn-bg); color: var(--warn); }
+  .pill.bad { background: var(--bad-bg); color: var(--bad); }
+
+  .bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip {
+    font: inherit; font-size: 14px; color: var(--muted); background: transparent; border: 1px solid var(--line);
+    border-radius: 8px; padding: 6px 12px; cursor: pointer; min-height: 36px; font-variant-numeric: tabular-nums;
+  }
+  .chip[aria-pressed="true"] { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
+  .synced { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  .charts { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px 12px; min-width: 0; }
+  .card .head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; margin-bottom: 8px; }
+  .legend { display: flex; gap: 14px; font-size: 13px; color: var(--muted); }
+  .legend i { display: inline-block; width: 12px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+  .chart { position: relative; height: 260px; }
+  .chart svg { display: block; width: 100%; height: 100%; touch-action: pan-y; }
+  .tip {
+    position: absolute; top: 8px; pointer-events: none; z-index: 2; min-width: 150px;
+    background: var(--ink); color: var(--bg); border-radius: 8px; padding: 8px 10px; font-size: 12.5px;
+    line-height: 1.45; font-variant-numeric: tabular-nums; box-shadow: 0 4px 14px rgba(0,0,0,.25);
+  }
+  .tip b { font-weight: 600; }
+  .empty { color: var(--muted); font-size: 14px; display: grid; place-items: center; height: 100%; text-align: center; padding: 0 16px; }
+
+  .tablewrap { max-height: 420px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { padding: 8px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; text-align: left; }
+  th { position: sticky; top: 0; z-index: 1; background: var(--soft); font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+  th.num, td.num { text-align: right; }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.hi { background: var(--hi-bg); color: var(--hi); font-weight: 600; }
+  td.lo { background: var(--lo-bg); color: var(--lo); font-weight: 600; }
+  td.hi::before { content: '\25B2\00A0'; font-size: 10px; }
+  td.lo::before { content: '\25BC\00A0'; font-size: 10px; }
+  .legend .sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+  .tfoot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: 10px; font-size: 13px; color: var(--muted); }
+
+  details.card summary { cursor: pointer; font-family: var(--font-head); font-weight: 600; font-size: 16px; }
+  .data-body { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+  .data-body p { margin: 0; color: var(--muted); font-size: 14px; }
+  textarea {
+    width: 100%; min-height: 110px; resize: vertical; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: 12.5px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px;
+  }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; }
+
+  .status { margin: 0; min-height: 22px; font-size: 14px; color: var(--muted); }
+  .status.bad { color: var(--bad); }
+  .status.ok { color: var(--ok); }
+
+  @media (max-width: 640px) {
+    h1 { font-size: 22px; }
+    .tile { padding: 12px 14px; }
+    .tile .val { font-size: 28px; }
+    .chart { height: 230px; }
+    header .btn { width: 100%; }
+    .tabs .tab { flex: 1 1 0; text-align: center; }
+    .chips { width: 100%; }
+    .chips .chip { flex: 1 1 0; padding-inline: 4px; }
+    .row .btn { flex: 1 1 100%; }
+    textarea { font-size: 16px; }
+    th, td { padding: 8px 6px; }
+    th { font-size: 10.5px; letter-spacing: 0; line-height: 1.25; }
+    td { font-size: 13.5px; }
+  }
+  @media (min-width: 900px) {
+    body { padding-block: 32px 56px; }
+    .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Pferdedecken-Monitor</h1>
+      <p class="sub">Klima unter der Decke. Die Daten bleiben auf diesem Gerät.</p>
+    </div>
+    <button class="btn primary" id="connectBtn" type="button">Mit Decke verbinden</button>
+  </header>
+
+  <div class="notice" id="notice" hidden></div>
+  <p class="status" id="status" role="status" aria-live="polite"></p>
+
+  <nav class="tabs" id="tabs" role="tablist" aria-label="Decke wählen"></nav>
+  <div class="demo" id="demo" hidden>Beispieldaten. Sobald du dich mit einer Decke verbindest und die Daten abgeholt hast, siehst du hier die echten Werte.</div>
+
+  <section class="tiles" aria-label="Letzte Messung">
+    <div class="tile t"><div class="lab">Temperatur</div><div class="val" id="vT">–</div><div class="note" id="nT"></div></div>
+    <div class="tile h"><div class="lab">Luftfeuchte</div><div class="val" id="vH">–</div><div class="note" id="nH"></div></div>
+    <div class="tile d"><div class="lab">Taupunkt</div><div class="val" id="vD">–</div><div class="note" id="nD"></div></div>
+    <div class="tile"><div class="lab">Klima</div><span class="pill ok" id="pill">–</span><div class="note" id="nK"></div></div>
+  </section>
+
+  <div class="bar">
+    <div class="chips" id="chips" role="group" aria-label="Zeitraum">
+      <button class="chip" type="button" data-r="24h" aria-pressed="true">24 Std.</button>
+      <button class="chip" type="button" data-r="3d" aria-pressed="false">3 Tage</button>
+      <button class="chip" type="button" data-r="7d" aria-pressed="false">7 Tage</button>
+      <button class="chip" type="button" data-r="all" aria-pressed="false">Alles</button>
+    </div>
+    <div class="synced" id="synced"></div>
+  </div>
+
+  <div class="charts">
+  <section class="card">
+    <div class="head">
+      <h2>Temperatur und Taupunkt</h2>
+      <div class="legend"><span><i style="background:var(--c-temp)"></i>Temperatur</span><span><i style="background:var(--c-dew)"></i>Taupunkt</span></div>
+    </div>
+    <div class="chart" id="ch1"></div>
+  </section>
+
+  <section class="card">
+    <div class="head">
+      <h2>Luftfeuchte</h2>
+      <div class="legend"><span><i style="background:var(--c-rh)"></i>relative Feuchte</span></div>
+    </div>
+    <div class="chart" id="ch2"></div>
+  </section>
+  </div>
+
+  <section class="card">
+    <div class="head">
+      <h2>Messwerte</h2>
+      <div class="legend"><span><i class="sw" style="background:var(--hi-bg);border:1px solid var(--hi)"></i>höchster Wert</span><span><i class="sw" style="background:var(--lo-bg);border:1px solid var(--lo)"></i>niedrigster Wert</span></div>
+    </div>
+    <div class="tablewrap">
+      <table id="tbl">
+        <thead><tr><th>Zeit</th><th class="num">Temp.<br>°C</th><th class="num">Feuchte<br>%</th><th class="num">Taupunkt<br>°C</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="tfoot"><span id="tblInfo"></span><button class="btn" type="button" id="moreBtn" hidden>Mehr anzeigen</button></div>
+  </section>
+
+  <details class="card" id="dataBox">
+    <summary>Daten sichern und wiederherstellen</summary>
+    <div class="data-body">
+      <p>Die Messwerte liegen im Speicher dieses Browsers. Wenn du dessen Website-Daten löschst, sind sie weg. Kopiere sie deshalb ab und zu als Text und hebe ihn auf. Zum Wiederherstellen fügst du den Text unten ein.</p>
+      <textarea id="dataText" spellcheck="false" aria-label="Messwerte als Text" placeholder="zeit;temperatur_c;feuchte_prozent"></textarea>
+      <div class="row">
+        <button class="btn" type="button" id="exportBtn">Daten dieser Decke kopieren</button>
+        <button class="btn" type="button" id="importBtn">Text importieren</button>
+        <button class="btn danger" type="button" id="wipeBtn">Daten dieser Decke löschen</button>
+      </div>
+    </div>
+  </details>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ---------- Konstanten ----------
+  var NUS_SERVICE = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+  var NUS_RX = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';   // App -> Decke (schreiben)
+  var NUS_TX = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';   // Decke -> App (Benachrichtigung)
+  var KEY = 'pferdedecke.v1';
+  var DEFAULT_SLOTS = ['PferdeDecke-1', 'PferdeDecke-2'];
+  var MAX_RECORDS = 20000;
+  var RANGES = { '24h': 24 * 3600e3, '3d': 72 * 3600e3, '7d': 7 * 86400e3, 'all': 0 };
+
+  function $(id) { return document.getElementById(id); }
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function fmt(v, d) { return v.toFixed(d).replace('.', ','); }
+  function fmtDT(ts) {
+    var d = new Date(ts);
+    return pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + '.' + d.getFullYear() + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
+  function dewPoint(t, rh) {
+    var a = 17.62, b = 243.12;
+    var g = Math.log(Math.max(rh, 0.1) / 100) + a * t / (b + t);
+    return b * g / (a - g);
+  }
+  function slotLabel(name) { return name.replace(/^PferdeDecke-/, 'Decke '); }
+
+  // ---------- Speicher ----------
+  var memJson = null;
+  var storageOk = true;
+  function loadStore() {
+    try { var s = localStorage.getItem(KEY); if (s) return JSON.parse(s); } catch (e) { storageOk = false; }
+    return { v: 1, blankets: {}, sel: null };
+  }
+  var store = loadStore();
+  if (!store.blankets) store.blankets = {};
+  function saveStore() {
+    var s = JSON.stringify(store);
+    try { localStorage.setItem(KEY, s); storageOk = true; }
+    catch (e) { storageOk = false; memJson = s; }
+    if (!storageOk) showNotice('Der Browser lässt hier kein Speichern zu. Die Werte gehen beim Schließen der Seite verloren. Kopiere sie vorher unter „Daten sichern“.', false);
+  }
+  function blanket(name) {
+    if (!store.blankets[name]) store.blankets[name] = { records: [], intervalS: 3600, lastSync: 0 };
+    return store.blankets[name];
+  }
+
+  // ---------- Zustand ----------
+  var sel = store.sel || DEFAULT_SLOTS[0];
+  var range = '24h';
+  var busy = false;
+
+  function slots() {
+    var list = DEFAULT_SLOTS.slice();
+    Object.keys(store.blankets).forEach(function (n) { if (list.indexOf(n) < 0) list.push(n); });
+    return list;
+  }
+
+  // ---------- Beispieldaten (nur Anzeige, werden nie gespeichert) ----------
+  function demoRecords() {
+    var out = [], now = Date.now(), n = 96;
+    for (var i = 0; i < n; i++) {
+      var ts = now - (n - 1 - i) * 3600e3;
+      var h = new Date(ts).getHours() + new Date(ts).getMinutes() / 60;
+      var wave = Math.sin((h - 9) / 24 * 2 * Math.PI);
+      var wob = Math.sin(i * 1.7) * 0.5 + Math.sin(i * 0.43) * 0.7;
+      var t = 15.5 + 5.5 * wave + wob;
+      var rh = 68 - 14 * wave + Math.sin(i * 1.1) * 4;
+      out.push({ ts: ts, t: Math.round(t * 100) / 100, rh: Math.round(Math.min(98, rh) * 100) / 100 });
+    }
+    return out;
+  }
+
+  // ---------- Hinweise ----------
+  function showNotice(text, bad) {
+    var n = $('notice'); n.textContent = text; n.className = 'notice' + (bad ? ' bad' : ''); n.hidden = !text;
+  }
+  function setStatus(text, kind) {
+    var s = $('status'); s.textContent = text || ''; s.className = 'status' + (kind ? ' ' + kind : '');
+  }
+
+  // ---------- Daten zusammenführen ----------
+  function nearestIdx(arr, ts) {
+    var lo = 0, hi = arr.length - 1;
+    if (hi < 0) return -1;
+    while (lo < hi) {
+      var mid = (lo + hi) >> 1;
+      if (arr[mid].ts < ts) lo = mid + 1; else hi = mid;
+    }
+    if (lo > 0 && Math.abs(arr[lo - 1].ts - ts) < Math.abs(arr[lo].ts - ts)) lo--;
+    return lo;
+  }
+  function mergeRecords(b, incoming, tolMs) {
+    var added = 0;
+    incoming.sort(function (a, c) { return a.ts - c.ts; });
+    incoming.forEach(function (r) {
+      var i = nearestIdx(b.records, r.ts);
+      if (i >= 0 && Math.abs(b.records[i].ts - r.ts) < tolMs) return;
+      b.records.push(r); added++;
+      b.records.sort(function (a, c) { return a.ts - c.ts; });
+    });
+    if (b.records.length > MAX_RECORDS) b.records = b.records.slice(b.records.length - MAX_RECORDS);
+    return added;
+  }
+
+  // ---------- Bluetooth ----------
+  var session = null;
+
+  function fail(msg) {
+    if (session) { clearTimeout(session.timer); clearTimeout(session.retry); }
+    if (session && session.server) { try { session.server.disconnect(); } catch (e) {} }
+    session = null; busy = false; $('connectBtn').disabled = false;
+    setStatus(msg, 'bad');
+  }
+
+  function finish() {
+    var s = session;
+    if (!s || !s.header) { fail('Die Decke hat keine gültigen Daten geschickt.'); return; }
+    clearTimeout(s.timer); clearTimeout(s.retry);
+    var h = s.header, n = s.rows.length;
+    var lastTs = s.t0 - h.age * 1000;
+    var incoming = s.rows.map(function (r, i) {
+      return { ts: Math.round(lastTs - (n - 1 - i) * h.interval * 1000), t: r.t, rh: r.rh };
+    });
+    var b = blanket(h.name);
+    b.intervalS = h.interval || b.intervalS;
+    var added = mergeRecords(b, incoming, Math.max(h.interval, 30) * 500);
+    b.lastSync = Date.now();
+    sel = h.name; store.sel = sel;
+    saveStore();
+    try { s.server.disconnect(); } catch (e) {}
+    session = null; busy = false; $('connectBtn').disabled = false;
+    setStatus(slotLabel(h.name) + ': ' + n + ' Messwerte abgeholt, ' + added + ' neu.', 'ok');
+    render();
+  }
+
+  function handleLine(line) {
+    if (!session) return;
+    var p = line.trim().split(',');
+    if (p[0] === 'H') {
+      session.header = { name: p[1] || session.devName, count: +p[2], interval: +p[3] || 3600, age: +p[4] || 0 };
+      session.t0 = Date.now();
+      setStatus('Lese Messwerte … 0 von ' + session.header.count);
+    } else if (p[0] === 'D') {
+      var t = +p[1] / 100, rh = +p[2] / 100;
+      if (isFinite(t) && isFinite(rh)) session.rows.push({ t: t, rh: rh });
+      if (session.header && session.rows.length % 10 === 0) setStatus('Lese Messwerte … ' + session.rows.length + ' von ' + session.header.count);
+    } else if (p[0] === 'E') {
+      finish();
+    }
+  }
+
+  function onData(ev) {
+    if (!session) return;
+    var v = ev.target.value;
+    var bytes = new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
+    session.buf += session.dec.decode(bytes, { stream: true });
+    armTimer();
+    var idx;
+    while ((idx = session.buf.indexOf('\n')) >= 0) {
+      var line = session.buf.slice(0, idx);
+      session.buf = session.buf.slice(idx + 1);
+      if (line.trim()) handleLine(line);
+      if (!session) return;
+    }
+  }
+
+  // Wartet maximal 15 s auf das nächste Datenpaket; "G" wird bis zu zweimal erneut geschickt, falls keine Antwort kommt.
+  function armTimer() {
+    if (!session) return;
+    clearTimeout(session.timer);
+    session.timer = setTimeout(function () {
+      if (!session) return;
+      fail(session.header
+        ? 'Übertragung abgebrochen nach ' + session.rows.length + ' von ' + session.header.count + ' Messwerten. Versuche es noch einmal.'
+        : 'Keine Antwort von der Decke. Versuche es noch einmal.');
+    }, 15000);
+  }
+  async function sendG() {
+    if (!session) return;
+    try { await session.rx.writeValue(new TextEncoder().encode('G\n')); }
+    catch (e) { fail('Senden fehlgeschlagen: ' + (e && e.message ? e.message : e)); return; }
+    if (!session) return;
+    session.tries++;
+    clearTimeout(session.retry);
+    session.retry = setTimeout(function () { if (session && !session.header && session.tries < 3) sendG(); }, 5000);
+  }
+
+  async function connect() {
+    if (busy) return;
+    if (!navigator.bluetooth) {
+      showNotice('Dieser Browser kann kein Web Bluetooth. Auf dem iPhone öffnest du die Seite in Bluefy, am PC in Chrome oder Edge.', true);
+      return;
+    }
+    showNotice('', false);
+    busy = true; $('connectBtn').disabled = true;
+    setStatus('Suche nach einer Decke …');
+    var device;
+    try {
+      device = await navigator.bluetooth.requestDevice({
+        filters: [{ services: [NUS_SERVICE] }, { namePrefix: 'PferdeDecke' }],   // findet das Board auch unter anderem Namen
+        optionalServices: [NUS_SERVICE]
+      });
+    } catch (e) {
+      busy = false; $('connectBtn').disabled = false;
+      if (e && e.name === 'NotFoundError') { setStatus('Keine Decke ausgewählt.'); }
+      else if (e && e.name === 'SecurityError') {
+        setStatus('', '');
+        showNotice('Bluetooth ist in dieser Ansicht gesperrt. Öffne die Seite direkt im Browser, nicht eingebettet in eine andere Seite.', true);
+      } else { setStatus('Bluetooth-Fehler: ' + (e && e.message ? e.message : e), 'bad'); }
+      return;
+    }
+    session = { devName: device.name || '', buf: '', rows: [], header: null, t0: 0, dec: new TextDecoder(), server: null, timer: null };
+    try {
+      setStatus('Verbinde mit ' + (device.name || 'Decke') + ' …');
+      var server = await device.gatt.connect();
+      session.server = server;
+      device.addEventListener('gattserverdisconnected', function () {
+        if (session && !session.done && session.server === server && session.rows.length === 0 && !session.header) {
+          fail('Die Verbindung wurde unterbrochen.');
+        }
+      });
+      var svc = await server.getPrimaryService(NUS_SERVICE);
+      var tx = await svc.getCharacteristic(NUS_TX);
+      var rx = await svc.getCharacteristic(NUS_RX);
+      tx.addEventListener('characteristicvaluechanged', onData);
+      await tx.startNotifications();
+      setStatus('Lese Messwerte …');
+      session.rx = rx; session.tries = 0;
+      armTimer();
+      await sendG();
+    } catch (e) {
+      fail('Verbindung fehlgeschlagen: ' + (e && e.message ? e.message : e));
+    }
+  }
+
+  // ---------- Ansicht: Kennzahlen ----------
+  function currentData() {
+    var b = store.blankets[sel];
+    if (b && b.records.length) {
+      return { recs: b.records, demo: false, intervalS: b.intervalS || 3600, lastSync: b.lastSync };
+    }
+    return { recs: demoRecords(), demo: true, intervalS: 3600, lastSync: 0 };
+  }
+  function enrich(recs) {
+    return recs.map(function (r) { return { ts: r.ts, t: r.t, rh: r.rh, td: dewPoint(r.t, r.rh) }; });
+  }
+  function ago(ts) {
+    var m = Math.round((Date.now() - ts) / 60000);
+    if (m < 1) return 'gerade eben';
+    if (m < 60) return 'vor ' + m + ' Min.';
+    var h = Math.round(m / 60);
+    if (h < 48) return 'vor ' + h + ' Std.';
+    return fmtDT(ts);
+  }
+  function windowOf(recs, demo) {
+    var last = recs[recs.length - 1].ts;
+    var end = demo ? Date.now() : Math.max(Date.now(), last);
+    var start = RANGES[range] ? end - RANGES[range] : recs[0].ts;
+    if (end - start < 3600e3) start = end - 3600e3;
+    return { x0: start, x1: end };
+  }
+
+  function renderTabs() {
+    var host = $('tabs');
+    host.innerHTML = '';
+    slots().forEach(function (n) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'tab'; b.setAttribute('role', 'tab');
+      b.setAttribute('aria-selected', n === sel ? 'true' : 'false');
+      b.textContent = slotLabel(n);
+      b.addEventListener('click', function () { sel = n; store.sel = n; saveStore(); render(); });
+      host.appendChild(b);
+    });
+  }
+
+  function renderTiles(d, recs, w) {
+    var last = recs[recs.length - 1];
+    $('vT').innerHTML = fmt(last.t, 1) + '<small>°C</small>';
+    $('vH').innerHTML = fmt(last.rh, 0) + '<small>%</small>';
+    $('vD').innerHTML = fmt(last.td, 1) + '<small>°C</small>';
+    var inW = recs.filter(function (r) { return r.ts >= w.x0 && r.ts <= w.x1; });
+    var label = range === 'all' ? 'gesamt' : $('chips').querySelector('[data-r="' + range + '"]').textContent;
+    function span(key, dec, unit) {
+      if (!inW.length) return '';
+      var mn = Infinity, mx = -Infinity;
+      inW.forEach(function (r) { if (r[key] < mn) mn = r[key]; if (r[key] > mx) mx = r[key]; });
+      return fmt(mn, dec) + ' bis ' + fmt(mx, dec) + ' ' + unit + ' (' + label + ')';
+    }
+    $('nT').textContent = span('t', 1, '°C');
+    $('nH').textContent = span('rh', 0, '%');
+    $('nD').textContent = span('td', 1, '°C');
+    var pill = $('pill'), k;
+    if (last.rh >= 85) k = ['bad', 'Sehr feucht'];
+    else if (last.rh >= 70) k = ['warn', 'Feucht'];
+    else k = ['ok', 'Normal'];
+    pill.className = 'pill ' + k[0]; pill.textContent = k[1];
+    $('nK').textContent = d.demo ? 'Beispielwerte' : 'Einfacher Richtwert für die Feuchte (70 und 85 %)';
+    $('synced').textContent = d.demo ? '' : 'Letzte Messung ' + ago(last.ts) + ' · abgeholt ' + fmtDT(d.lastSync);
+  }
+
+  // ---------- Ansicht: Diagramme (eigene SVG-Zeichnung, keine Bibliothek) ----------
+  function niceTicks(min, max, n) {
+    if (!(max > min)) { max = min + 1; }
+    var raw = (max - min) / n, mag = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / mag;
+    var step = (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * mag;
+    var a = Math.floor(min / step) * step, b = Math.ceil(max / step) * step, out = [];
+    for (var v = a; v <= b + step / 1000; v += step) out.push(Math.round(v * 1e6) / 1e6);
+    return out;
+  }
+  function timeTicks(x0, x1) {
+    var H = 3600e3, cands = [1, 2, 3, 6, 12, 24, 48, 96, 168], span = x1 - x0, step = cands[cands.length - 1] * H;
+    for (var i = 0; i < cands.length; i++) { if (span / (cands[i] * H) <= 6) { step = cands[i] * H; break; } }
+    var off = new Date(x0).getTimezoneOffset() * 60000, out = [];
+    for (var v = Math.ceil((x0 - off) / step) * step + off; v <= x1; v += step) out.push(v);
+    return { ticks: out, step: step, span: span };
+  }
+  function tickLabel(v, tt) {
+    var d = new Date(v);
+    if (tt.step >= 24 * 3600e3) return pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + '.';
+    if (tt.span <= 36 * 3600e3) return pad(d.getHours()) + ':' + pad(d.getMinutes());
+    return pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + '. ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
+
+  // o: { recs, series:[{key,color,fill}], x0, x1, gapMs, clamp:[lo,hi]|null, dec, unit, label }
+  function drawChart(host, o) {
+    host.innerHTML = '';
+    var W = host.clientWidth, H = host.clientHeight;
+    if (!W || !H) return;
+    var pts = o.recs.filter(function (r) { return r.ts >= o.x0 && r.ts <= o.x1; });
+    if (!pts.length) { host.innerHTML = '<div class="empty">Im gewählten Zeitraum gibt es keine Messwerte.</div>'; return; }
+
+    var m = { l: 44, r: 12, t: 10, b: 26 }, iw = W - m.l - m.r, ih = H - m.t - m.b;
+    var lo = Infinity, hi = -Infinity;
+    o.series.forEach(function (s) { pts.forEach(function (r) { if (r[s.key] < lo) lo = r[s.key]; if (r[s.key] > hi) hi = r[s.key]; }); });
+    var pad8 = Math.max((hi - lo) * 0.1, 0.5);
+    lo -= pad8; hi += pad8;
+    if (o.clamp) { lo = Math.max(lo, o.clamp[0]); hi = Math.min(hi, o.clamp[1]); }
+    var yt = niceTicks(lo, hi, 5);
+    if (o.clamp) yt = yt.filter(function (v) { return v >= o.clamp[0] && v <= o.clamp[1]; });
+    var y0 = yt[0], y1 = yt[yt.length - 1];
+    if (!(y1 > y0)) { y1 = y0 + 1; }
+    function sx(x) { return m.l + (x - o.x0) / (o.x1 - o.x0) * iw; }
+    function sy(y) { return m.t + (1 - (y - y0) / (y1 - y0)) * ih; }
+
+    var tt = timeTicks(o.x0, o.x1), g = [];
+    yt.forEach(function (v) {
+      var y = sy(v).toFixed(1);
+      g.push('<line x1="' + m.l + '" x2="' + (W - m.r) + '" y1="' + y + '" y2="' + y + '" style="stroke:var(--line)" stroke-width="1"/>');
+      g.push('<text x="' + (m.l - 8) + '" y="' + (+y + 4) + '" text-anchor="end" font-size="11.5" style="fill:var(--muted)">' + fmt(v, o.dec) + '</text>');
+    });
+    tt.ticks.forEach(function (v) {
+      var x = sx(v).toFixed(1);
+      g.push('<line x1="' + x + '" x2="' + x + '" y1="' + (m.t + ih) + '" y2="' + (m.t + ih + 4) + '" style="stroke:var(--muted)" stroke-width="1"/>');
+      g.push('<text x="' + x + '" y="' + (H - 6) + '" text-anchor="middle" font-size="11.5" style="fill:var(--muted)">' + tickLabel(v, tt) + '</text>');
+    });
+
+    var showDots = pts.length <= 100;
+    o.series.forEach(function (s) {
+      var segs = [], cur = [];
+      pts.forEach(function (r, i) {
+        if (i > 0 && r.ts - pts[i - 1].ts > o.gapMs) { segs.push(cur); cur = []; }
+        cur.push(r);
+      });
+      segs.push(cur);
+      segs.forEach(function (seg) {
+        if (seg.length === 1) {
+          g.push('<circle cx="' + sx(seg[0].ts).toFixed(1) + '" cy="' + sy(seg[0][s.key]).toFixed(1) + '" r="2.6" style="fill:' + s.color + '"/>');
+          return;
+        }
+        var d = seg.map(function (r, i) { return (i ? 'L' : 'M') + sx(r.ts).toFixed(1) + ' ' + sy(r[s.key]).toFixed(1); }).join('');
+        if (s.fill) {
+          var base = sy(y0).toFixed(1);
+          g.push('<path d="' + d + 'L' + sx(seg[seg.length - 1].ts).toFixed(1) + ' ' + base + 'L' + sx(seg[0].ts).toFixed(1) + ' ' + base + 'Z" style="fill:' + s.color + '" opacity="0.13"/>');
+        }
+        g.push('<path d="' + d + '" fill="none" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" style="stroke:' + s.color + '"/>');
+      });
+      if (showDots) pts.forEach(function (r) {
+        g.push('<circle cx="' + sx(r.ts).toFixed(1) + '" cy="' + sy(r[s.key]).toFixed(1) + '" r="2.3" style="fill:' + s.color + '"/>');
+      });
+    });
+
+    var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + o.label + '">' + g.join('') +
+      '<line id="cur" y1="' + m.t + '" y2="' + (m.t + ih) + '" style="stroke:var(--muted)" stroke-dasharray="3 3" visibility="hidden"/>' +
+      o.series.map(function (s, i) { return '<circle id="dot' + i + '" r="4" stroke-width="2" visibility="hidden" style="fill:var(--surface);stroke:' + s.color + '"/>'; }).join('') +
+      '<rect x="' + m.l + '" y="' + m.t + '" width="' + iw + '" height="' + ih + '" fill="transparent" id="hit"/></svg>';
+    host.innerHTML = svg + '<div class="tip" id="tip" hidden></div>';
+
+    var hit = host.querySelector('#hit'), cur = host.querySelector('#cur'), tip = host.querySelector('#tip');
+    var dots = o.series.map(function (s, i) { return host.querySelector('#dot' + i); });
+    function hide() { cur.setAttribute('visibility', 'hidden'); dots.forEach(function (d) { d.setAttribute('visibility', 'hidden'); }); tip.hidden = true; }
+    function move(ev) {
+      var rect = host.getBoundingClientRect(), px = ev.clientX - rect.left;
+      var ts = o.x0 + (px - m.l) / iw * (o.x1 - o.x0);
+      var i = nearestIdx(pts, ts); if (i < 0) return;
+      var r = pts[i], x = sx(r.ts);
+      cur.setAttribute('x1', x); cur.setAttribute('x2', x); cur.setAttribute('visibility', 'visible');
+      o.series.forEach(function (s, k) { dots[k].setAttribute('cx', x); dots[k].setAttribute('cy', sy(r[s.key])); dots[k].setAttribute('visibility', 'visible'); });
+      tip.innerHTML = '<b>' + fmtDT(r.ts) + '</b><br>Temperatur ' + fmt(r.t, 1) + ' °C<br>Feuchte ' + fmt(r.rh, 0) + ' %<br>Taupunkt ' + fmt(r.td, 1) + ' °C';
+      tip.hidden = false;
+      var tw = tip.offsetWidth, left = x + 12;
+      if (left + tw > W - 4) left = x - tw - 12;
+      tip.style.left = Math.max(4, left) + 'px';
+    }
+    hit.addEventListener('pointermove', move);
+    hit.addEventListener('pointerdown', move);
+    hit.addEventListener('pointerleave', hide);
+    hit.addEventListener('pointercancel', hide);
+  }
+
+  function renderCharts(d, recs, w) {
+    var gapMs = Math.max(d.intervalS * 2500, 3 * 3600e3);
+    drawChart($('ch1'), {
+      recs: recs, x0: w.x0, x1: w.x1, gapMs: gapMs, clamp: null, dec: 1, unit: '°C', label: 'Temperatur und Taupunkt im Zeitverlauf',
+      series: [{ key: 'td', color: 'var(--c-dew)' }, { key: 't', color: 'var(--c-temp)' }]
+    });
+    drawChart($('ch2'), {
+      recs: recs, x0: w.x0, x1: w.x1, gapMs: gapMs, clamp: [0, 100], dec: 0, unit: '%', label: 'Relative Luftfeuchte im Zeitverlauf',
+      series: [{ key: 'rh', color: 'var(--c-rh)', fill: true }]
+    });
+  }
+
+  // ---------- Ansicht: Tabelle (neueste zuerst, niedrigster und höchster Wert je Spalte farbig) ----------
+  var tableLimit = 100, tblKey = '';
+  function q1(v) { return Math.round(v * 10) / 10; }
+  function renderTable(recs, w) {
+    var key = sel + '|' + range;
+    if (key !== tblKey) { tblKey = key; tableLimit = 100; }
+    var body = document.querySelector('#tbl tbody');
+    var pts = recs.filter(function (r) { return r.ts >= w.x0 && r.ts <= w.x1; });
+    if (!pts.length) {
+      body.innerHTML = '<tr><td colspan="4">Im gewählten Zeitraum gibt es keine Messwerte.</td></tr>';
+      $('tblInfo').textContent = ''; $('moreBtn').hidden = true; return;
+    }
+    var mn = {}, mx = {};
+    ['t', 'rh', 'td'].forEach(function (k) {
+      var lo = Infinity, hi = -Infinity;
+      pts.forEach(function (r) { var v = q1(r[k]); if (v < lo) lo = v; if (v > hi) hi = v; });
+      mn[k] = lo; mx[k] = hi;
+    });
+    function cell(k, r) {
+      var v = q1(r[k]), c = '';
+      if (mx[k] !== mn[k]) c = v === mx[k] ? ' hi' : (v === mn[k] ? ' lo' : '');
+      return '<td class="num' + c + '">' + fmt(v, 1) + '</td>';
+    }
+    var shown = pts.slice().reverse().slice(0, tableLimit), html = [];
+    shown.forEach(function (r) {
+      var d = new Date(r.ts);
+      html.push('<tr><td>' + pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + '. ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + '</td>' +
+        cell('t', r) + cell('rh', r) + cell('td', r) + '</tr>');
+    });
+    body.innerHTML = html.join('');
+    $('tblInfo').textContent = shown.length + ' von ' + pts.length + ' Messwerten, neueste zuerst';
+    $('moreBtn').hidden = shown.length >= pts.length;
+  }
+
+  function render() {
+    renderTabs();
+    var d = currentData();
+    var recs = enrich(d.recs);
+    var w = windowOf(recs, d.demo);
+    $('demo').hidden = !d.demo;
+    renderTiles(d, recs, w);
+    renderCharts(d, recs, w);
+    renderTable(recs, w);
+    $('chips').querySelectorAll('.chip').forEach(function (c) { c.setAttribute('aria-pressed', c.getAttribute('data-r') === range ? 'true' : 'false'); });
+  }
+
+  // ---------- Daten sichern ----------
+  function toCsv(b) {
+    var lines = ['zeit;temperatur_c;feuchte_prozent'];
+    b.records.forEach(function (r) { lines.push(new Date(r.ts).toISOString() + ';' + r.t.toFixed(2) + ';' + r.rh.toFixed(2)); });
+    return lines.join('\n');
+  }
+  async function doExport() {
+    var b = store.blankets[sel];
+    if (!b || !b.records.length) { setStatus('Für ' + slotLabel(sel) + ' gibt es noch keine echten Messwerte.', 'bad'); return; }
+    var ta = $('dataText'); ta.value = toCsv(b); ta.focus(); ta.select();
+    var ok = false;
+    try { await navigator.clipboard.writeText(ta.value); ok = true; } catch (e) {
+      try { ok = document.execCommand('copy'); } catch (e2) { ok = false; }
+    }
+    setStatus(ok ? 'Kopiert: ' + b.records.length + ' Messwerte von ' + slotLabel(sel) + '.' : 'Der Text steht im Feld. Markiere ihn und kopiere ihn von Hand.', ok ? 'ok' : '');
+  }
+  function doImport() {
+    var text = $('dataText').value.split(/\r?\n/), incoming = [];
+    text.forEach(function (line) {
+      var p = line.split(';');
+      if (p.length < 3) return;
+      var ts = Date.parse(p[0]), t = parseFloat(p[1].replace(',', '.')), rh = parseFloat(p[2].replace(',', '.'));
+      if (isFinite(ts) && isFinite(t) && isFinite(rh)) incoming.push({ ts: ts, t: t, rh: rh });
+    });
+    if (!incoming.length) { setStatus('Im Text wurden keine Messwerte erkannt. Erwartet wird: zeit;temperatur_c;feuchte_prozent', 'bad'); return; }
+    var b = blanket(sel);
+    var added = mergeRecords(b, incoming, 30 * 1000);
+    saveStore(); render();
+    setStatus(added + ' von ' + incoming.length + ' Messwerten zu ' + slotLabel(sel) + ' hinzugefügt.', 'ok');
+  }
+  var wipeTimer = null;
+  function doWipe() {
+    var btn = $('wipeBtn');
+    if (!btn.getAttribute('data-arm')) {
+      btn.setAttribute('data-arm', '1'); btn.textContent = 'Wirklich löschen?';
+      wipeTimer = setTimeout(resetWipe, 4000); return;
+    }
+    resetWipe();
+    delete store.blankets[sel]; saveStore(); render();
+    setStatus('Die Daten von ' + slotLabel(sel) + ' sind gelöscht.', 'ok');
+  }
+  function resetWipe() {
+    clearTimeout(wipeTimer);
+    var btn = $('wipeBtn'); btn.removeAttribute('data-arm'); btn.textContent = 'Daten dieser Decke löschen';
+  }
+
+  // ---------- Start ----------
+  $('connectBtn').addEventListener('click', connect);
+  $('exportBtn').addEventListener('click', doExport);
+  $('importBtn').addEventListener('click', doImport);
+  $('wipeBtn').addEventListener('click', doWipe);
+  $('moreBtn').addEventListener('click', function () { tableLimit += 200; render(); });
+  $('chips').addEventListener('click', function (e) {
+    var r = e.target && e.target.getAttribute && e.target.getAttribute('data-r');
+    if (r) { range = r; render(); }
+  });
+  if (window.ResizeObserver) {
+    var ro = new ResizeObserver(function () { clearTimeout(ro.t); ro.t = setTimeout(render, 60); });
+    ro.observe($('ch1'));
+  } else { window.addEventListener('resize', render); }
+  window.addEventListener('resize', function () { /* Ränder neu zeichnen */ });
+  if (!navigator.bluetooth) {
+    showNotice('Dieser Browser kann kein Web Bluetooth. Auf dem iPhone öffnest du die Seite in Bluefy, am PC in Chrome oder Edge. Die gespeicherten Werte siehst du trotzdem.', false);
+  }
+  render();
+})();
+</script>
+
+</body></html>
