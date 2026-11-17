@@ -282,6 +282,14 @@
   }
   var store = loadStore();
   if (!store.blankets) store.blankets = {};
+  // Unmögliche Werte (z. B. 0 % Feuchte durch eine gestörte Übertragung) werden nie angezeigt.
+  function plausible(t, rh) { return isFinite(t) && isFinite(rh) && t >= -40 && t <= 85 && rh >= 1 && rh <= 100; }
+  var purged = 0;
+  Object.keys(store.blankets).forEach(function (n) {
+    var b = store.blankets[n], before = (b.records || []).length;
+    b.records = (b.records || []).filter(function (r) { return plausible(r.t, r.rh); });
+    purged += before - b.records.length;
+  });
   function saveStore() {
     var s = JSON.stringify(store);
     try { localStorage.setItem(KEY, s); storageOk = true; }
@@ -373,9 +381,14 @@
     if (!s || !s.header) { fail('Die Decke hat keine gültigen Daten geschickt.'); return; }
     clearTimeout(s.timer); clearTimeout(s.retry);
     var h = s.header, n = s.rows.length;
+    if (n !== h.count || s.bad) {
+      fail('Übertragung unvollständig: ' + n + ' von ' + h.count + ' Zeilen kamen an. Es wurde nichts gespeichert. Versuche es noch einmal.');
+      return;
+    }
     var lastTs = s.t0 - h.age * 1000;
-    var incoming = s.rows.map(function (r, i) {
-      return { ts: Math.round(lastTs - (n - 1 - i) * h.interval * 1000), t: r.t, rh: r.rh };
+    var incoming = [];
+    s.rows.forEach(function (r, i) {
+      if (r.ok) incoming.push({ ts: Math.round(lastTs - (n - 1 - i) * h.interval * 1000), t: r.t, rh: r.rh });
     });
     var b = blanket(h.name);
     b.intervalS = h.interval || b.intervalS;
@@ -397,8 +410,11 @@
       session.t0 = Date.now();
       setStatus('Lese Messwerte … 0 von ' + session.header.count);
     } else if (p[0] === 'D') {
-      var t = +p[1] / 100, rh = +p[2] / 100;
-      if (isFinite(t) && isFinite(rh)) session.rows.push({ t: t, rh: rh });
+      var m = /^D,(-?\d+),(\d+)$/.exec(line.trim());
+      if (m) {
+        var t = +m[1] / 100, rh = +m[2] / 100;
+        session.rows.push({ t: t, rh: rh, ok: plausible(t, rh) });
+      } else { session.bad = (session.bad || 0) + 1; }
       if (session.header && session.rows.length % 10 === 0) setStatus('Lese Messwerte … ' + session.rows.length + ' von ' + session.header.count);
     } else if (p[0] === 'E') {
       finish();
@@ -746,7 +762,7 @@
       var p = line.split(';');
       if (p.length < 3) return;
       var ts = Date.parse(p[0]), t = parseFloat(p[1].replace(',', '.')), rh = parseFloat(p[2].replace(',', '.'));
-      if (isFinite(ts) && isFinite(t) && isFinite(rh)) incoming.push({ ts: ts, t: t, rh: rh });
+      if (isFinite(ts) && plausible(t, rh)) incoming.push({ ts: ts, t: t, rh: rh });
     });
     if (!incoming.length) { setStatus('Im Text wurden keine Messwerte erkannt. Erwartet wird: zeit;temperatur_c;feuchte_prozent', 'bad'); return; }
     var b = blanket(sel);
@@ -787,6 +803,10 @@
   window.addEventListener('resize', function () { /* Ränder neu zeichnen */ });
   if (!navigator.bluetooth) {
     showNotice('Dieser Browser kann kein Web Bluetooth. Auf dem iPhone öffnest du die Seite in Bluefy, am PC in Chrome oder Edge. Die gespeicherten Werte siehst du trotzdem.', false);
+  }
+  if (purged) {
+    saveStore();
+    showNotice(purged + ' ungültige Messwerte (z. B. 0 % Feuchte) wurden aus dem Speicher entfernt.', false);
   }
   render();
 })();
