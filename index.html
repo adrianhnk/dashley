@@ -290,10 +290,17 @@
   var range = '24h';
   var busy = false;
 
+  // Nur Decken mit gespeicherten Messwerten bekommen einen Tab; leere Standard-Decken bleiben unsichtbar.
   function slots() {
-    var list = DEFAULT_SLOTS.slice();
-    Object.keys(store.blankets).forEach(function (n) { if (list.indexOf(n) < 0) list.push(n); });
-    return list;
+    var names = Object.keys(store.blankets).filter(function (n) {
+      return store.blankets[n].records && store.blankets[n].records.length;
+    });
+    names.sort(function (a, b) {
+      var ia = DEFAULT_SLOTS.indexOf(a), ib = DEFAULT_SLOTS.indexOf(b);
+      if (ia < 0) ia = 99; if (ib < 0) ib = 99;
+      return (ia - ib) || (a < b ? -1 : 1);
+    });
+    return names;
   }
 
   // ---------- Beispieldaten (nur Anzeige, werden nie gespeichert) ----------
@@ -504,7 +511,10 @@
   function renderTabs() {
     var host = $('tabs');
     host.innerHTML = '';
-    slots().forEach(function (n) {
+    var list = slots();
+    if (list.length && list.indexOf(sel) < 0) sel = list[0];
+    host.hidden = !list.length;
+    list.forEach(function (n) {
       var b = document.createElement('button');
       b.type = 'button'; b.className = 'tab'; b.setAttribute('role', 'tab');
       b.setAttribute('aria-selected', n === sel ? 'true' : 'false');
