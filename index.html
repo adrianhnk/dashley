@@ -410,6 +410,7 @@
     if (!session) return;
     var p = line.trim().split(',');
     if (p[0] === 'H') {
+      if (!/^H,[^,]+,\d+,\d+,\d+(,\d+)?$/.test(line.trim())) { session.bad = (session.bad || 0) + 1; return; }   // verstümmelte Kopfzeile
       session.header = { name: p[1] || session.devName, count: +p[2], interval: +p[3] || 3600, age: +p[4] || 0, v3: p[5] === '3' };
       session.t0 = Date.now();
       setStatus('Lese Messwerte … 0 von ' + session.header.count);

@@ -235,11 +235,14 @@ static bool sendLine(const char *s) {
   uint32_t t0 = millis();
   while (off < len) {
     if (!Bluefruit.connected()) return false;
-    size_t n = bleuart.write((const uint8_t *)s + off, len - off);
+    size_t chunk = len - off > 20 ? 20 : len - off;   // ein Funkpaket fasst höchstens 20 Byte Nutzdaten
+    size_t n = bleuart.write((const uint8_t *)s + off, chunk);
     off += n;
     if (n == 0) {
       delay(20);
       if (millis() - t0 > 3000) return false;
+    } else {
+      delay(4);
     }
   }
   delay(8);                                // dem Funk Luft lassen
