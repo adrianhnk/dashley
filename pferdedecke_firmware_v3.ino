@@ -12,6 +12,7 @@
 #include <Adafruit_LittleFS.h>
 #include <InternalFileSystem.h>
 #include "nrf_gpio.h"
+#include "nrf.h"
 using namespace Adafruit_LittleFS_Namespace;
 
 // ---------- Einstellungen ----------
@@ -124,6 +125,43 @@ static void storeRecord(float t, float rh) {
   dirty = true;
 }
 
+// ---------- Akkuspannung (interne VDDH-Messung, kein Pin nötig) ----------
+static int16_t adcBuf;
+static uint16_t vbatMv = 0;          // letzte Messung in mV, 0 = unbekannt
+
+static bool adcWait(volatile uint32_t &ev, uint32_t ms) {
+  uint32_t t0 = millis();
+  while (!ev) { if (millis() - t0 > ms) return false; }
+  return true;
+}
+
+static uint16_t readVbatMv() {
+  NRF_SAADC->ENABLE = 1;
+  NRF_SAADC->RESOLUTION = 2;                 // 12 Bit
+  NRF_SAADC->OVERSAMPLE = 0;
+  NRF_SAADC->CH[0].PSELP = 0x0D;             // VDDHDIV5 (VDDH / 5)
+  NRF_SAADC->CH[0].PSELN = 0;
+  NRF_SAADC->CH[0].CONFIG = (4UL << 8) | (5UL << 16);   // Gain 1/2, Referenz 0,6 V (Bereich 1,2 V), TACQ 40 us
+  NRF_SAADC->RESULT.PTR = (uint32_t)&adcBuf;
+  NRF_SAADC->RESULT.MAXCNT = 1;
+  NRF_SAADC->EVENTS_CALIBRATEDONE = 0;
+  NRF_SAADC->TASKS_CALIBRATEOFFSET = 1;
+  if (!adcWait(NRF_SAADC->EVENTS_CALIBRATEDONE, 100)) { NRF_SAADC->ENABLE = 0; return 0; }
+  float sum = 0;
+  for (int i = 0; i < 8; i++) {
+    NRF_SAADC->EVENTS_STARTED = 0; NRF_SAADC->EVENTS_END = 0; NRF_SAADC->EVENTS_STOPPED = 0;
+    NRF_SAADC->TASKS_START = 1;
+    if (!adcWait(NRF_SAADC->EVENTS_STARTED, 100)) { NRF_SAADC->ENABLE = 0; return 0; }
+    NRF_SAADC->TASKS_SAMPLE = 1;
+    if (!adcWait(NRF_SAADC->EVENTS_END, 100)) { NRF_SAADC->ENABLE = 0; return 0; }
+    NRF_SAADC->TASKS_STOP = 1;
+    adcWait(NRF_SAADC->EVENTS_STOPPED, 100);
+    sum += (adcBuf < 0 ? 0 : adcBuf);
+  }
+  NRF_SAADC->ENABLE = 0;
+  return (uint16_t)lroundf(sum / 8.0f * 1.2f / 4096.0f * 5.0f * 1000.0f);
+}
+
 static void measureNow() {
   float t, rh;
   bool ok = false;
@@ -132,6 +170,7 @@ static void measureNow() {
     else delay(20);
   }
   if (!ok) sensorFails++;
+  vbatMv = readVbatMv();
   lastMeasMs = millis();       // auch bei Fehlschlag, sonst Dauermessen
 }
 
@@ -260,10 +299,10 @@ static void sendAll(uint32_t since) {
     if (!(r.ts & PROV) && r.ts > since) n++;
   }
   uint32_t nowUnix = epochBase ? epochBase + upSec() : 0;
-  // Kopfzeile: Name, Anzahl folgender Werte, Intervall, Uhrzeit, Version, gespeicherte Werte gesamt, Sensor-Lesefehler
-  snprintf(line, sizeof(line), "H,%s,%lu,%lu,%lu,3,%u,%lu\n", BLANKET_NAME,
+  // Kopfzeile: Name, Anzahl folgender Werte, Intervall, Uhrzeit, Version, gespeicherte Werte gesamt, Sensor-Lesefehler, Akku in mV
+  snprintf(line, sizeof(line), "H,%s,%lu,%lu,%lu,3,%u,%lu,%u\n", BLANKET_NAME,
            (unsigned long)n, (unsigned long)MEAS_INTERVAL_S, (unsigned long)nowUnix,
-           (unsigned)count, (unsigned long)sensorFails);
+           (unsigned)count, (unsigned long)sensorFails, (unsigned)vbatMv);
   if (!sendLine(line)) return;
   for (uint16_t i = 0; i < count; i++) {
     const Rec &r = recAt(i);

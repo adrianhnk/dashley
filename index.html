@@ -409,6 +409,7 @@
     b.intervalS = h.interval || b.intervalS;
     var added = mergeRecords(b, incoming, Math.max(h.interval, 30) * 500);
     b.lastSync = Date.now();
+    if (h.mv >= 2500 && h.mv <= 5000) { b.vbat = h.mv / 1000; b.vbatTs = Date.now(); }
     sel = h.name; store.sel = sel;
     saveStore();
     try { s.server.disconnect(); } catch (e) {}
@@ -424,8 +425,8 @@
     if (!session) return;
     var p = line.trim().split(',');
     if (p[0] === 'H') {
-      if (!/^H,[^,]+,\d+,\d+,\d+(,\d+){0,3}$/.test(line.trim())) { session.bad = (session.bad || 0) + 1; return; }   // verstümmelte Kopfzeile
-      session.header = { name: p[1] || session.devName, count: +p[2], interval: +p[3] || 3600, age: +p[4] || 0, v3: p[5] === '3', total: p[6] === undefined ? null : +p[6], fails: p[7] === undefined ? null : +p[7] };
+      if (!/^H,[^,]+,\d+,\d+,\d+(,\d+){0,4}$/.test(line.trim())) { session.bad = (session.bad || 0) + 1; return; }   // verstümmelte Kopfzeile
+      session.header = { name: p[1] || session.devName, count: +p[2], interval: +p[3] || 3600, age: +p[4] || 0, v3: p[5] === '3', total: p[6] === undefined ? null : +p[6], fails: p[7] === undefined ? null : +p[7], mv: p[8] === undefined ? 0 : +p[8] };
       session.t0 = Date.now();
       setStatus('Lese Messwerte … 0 von ' + session.header.count);
     } else if (p[0] === 'D') {
@@ -576,6 +577,21 @@
     if (m) m.setAttribute('content', h === 'ashley' ? '#f1e7dc' : h === 'donni' ? '#f8f9fb' : '#f5f8f6');
   }
 
+  // Akkustand aus der Spannung (grobe LiPo-Kennlinie, ohne Last gemessen)
+  function batteryPct(v) {
+    var tb = [[3.30, 0], [3.60, 5], [3.70, 15], [3.75, 25], [3.80, 40], [3.85, 55], [3.90, 65], [3.98, 75], [4.08, 85], [4.15, 95], [4.20, 100]];
+    if (v <= tb[0][0]) return 0;
+    if (v >= 4.20) return 100;
+    for (var i = 1; i < tb.length; i++) {
+      if (v <= tb[i][0]) return Math.round(tb[i - 1][1] + (tb[i][1] - tb[i - 1][1]) * (v - tb[i - 1][0]) / (tb[i][0] - tb[i - 1][0]));
+    }
+    return 100;
+  }
+  function batteryText(b) {
+    if (!b || !b.vbat) return '';
+    return ' · Akku ' + fmt(b.vbat, 2) + ' V (ca. ' + batteryPct(b.vbat) + ' %)' + (b.vbat < 3.6 ? ' – bald laden' : '');
+  }
+
   function renderTabs() {
     var host = $('tabs');
     host.innerHTML = '';
@@ -616,6 +632,7 @@
     pill.className = 'pill ' + k[0]; pill.textContent = k[1];
     $('nK').textContent = d.demo ? 'Beispielwerte' : 'Einfacher Richtwert für die Feuchte (70 und 85 %)';
     $('synced').textContent = d.demo ? '' : 'Letzte Messung ' + ago(last.ts) + ' · abgeholt ' + fmtDT(d.lastSync);
+    $('synced').textContent += d.demo ? '' : batteryText(store.blankets[sel]);
   }
 
   // ---------- Ansicht: Diagramme (eigene SVG-Zeichnung, keine Bibliothek) ----------
