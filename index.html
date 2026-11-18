@@ -217,31 +217,6 @@
     <div class="tile"><div class="lab">Klima</div><span class="pill ok" id="pill">–</span><div class="note" id="nK"></div></div>
   </section>
 
-  <section class="card" id="wxCard">
-    <div class="head">
-      <h2>Wetter und Deckenempfehlung</h2>
-      <div class="synced" id="wxAge"></div>
-    </div>
-    <div class="wxset">
-      <label>Schur
-        <select id="clipSel" aria-label="Schur des Pferdes">
-          <option value="full">vollgeschoren</option>
-          <option value="trace">Teilschur</option>
-          <option value="none">ungeschoren</option>
-        </select>
-      </label>
-      <button class="btn" type="button" id="wxLocBtn">Ort wählen</button>
-      <button class="btn" type="button" id="wxRefresh">Aktualisieren</button>
-    </div>
-    <div class="wxloc" id="wxLoc" hidden>
-      <input type="text" id="wxQuery" placeholder="Ort oder Postleitzahl" autocomplete="off" aria-label="Ort">
-      <button class="btn primary" type="button" id="wxSearch">Suchen</button>
-    </div>
-    <div class="wxres" id="wxRes"></div>
-    <div id="wxBody"></div>
-    <p class="wxnote">Richtwerte für die Decke draußen, abgeleitet aus Herstellerangaben. Wetterdaten von Open-Meteo. Fühl zusätzlich unter der Decke an Schulter und Flanke nach.</p>
-  </section>
-
   <div class="bar">
     <div class="chips" id="chips" role="group" aria-label="Zeitraum">
       <button class="chip" type="button" data-r="24h" aria-pressed="true">24 Std.</button>
@@ -269,6 +244,25 @@
     <div class="chart" id="ch2"></div>
   </section>
   </div>
+
+  <section class="card" id="wxCard">
+    <div class="head">
+      <h2>Wetter in Königslutter und Deckenempfehlung</h2>
+      <div class="synced" id="wxAge"></div>
+    </div>
+    <div class="wxset">
+      <label>Schur
+        <select id="clipSel" aria-label="Schur des Pferdes">
+          <option value="full">vollgeschoren</option>
+          <option value="trace">Teilschur</option>
+          <option value="none">ungeschoren</option>
+        </select>
+      </label>
+      <button class="btn" type="button" id="wxRefresh">Aktualisieren</button>
+    </div>
+    <div id="wxBody"></div>
+    <p class="wxnote">Richtwerte für die Decke draußen, abgeleitet aus Herstellerangaben. Wetterdaten von Open-Meteo. Fühl zusätzlich unter der Decke an Schulter und Flanke nach.</p>
+  </section>
 
   <section class="card">
     <div class="head">
@@ -855,17 +849,17 @@
     if (clip === 'full') return eff >= 18 ? 0 : eff >= 10 ? 1 : eff >= 5 ? 2 : eff >= 0 ? 3 : eff >= -7 ? 4 : 5;
     return eff >= 7 ? 0 : eff >= -1 ? 2 : eff >= -9 ? 4 : 5;
   }
+  var WX_LOC = { name: 'Königslutter', lat: 52.253, lon: 10.82 };
   function wxClip() { return (store.clip && store.clip[sel]) || 'full'; }
 
   function wxFetch(force) {
-    if (!store.loc) return Promise.resolve();
     var c = store.wx;
-    if (!force && c && c.lat === store.loc.lat && c.lon === store.loc.lon && Date.now() - c.ts < 30 * 60 * 1000) return Promise.resolve();
-    var url = 'https://api.open-meteo.com/v1/forecast?latitude=' + store.loc.lat + '&longitude=' + store.loc.lon +
+    if (!force && c && c.lat === WX_LOC.lat && c.lon === WX_LOC.lon && Date.now() - c.ts < 30 * 60 * 1000) return Promise.resolve();
+    var url = 'https://api.open-meteo.com/v1/forecast?latitude=' + WX_LOC.lat + '&longitude=' + WX_LOC.lon +
       '&hourly=temperature_2m,apparent_temperature,precipitation,wind_speed_10m&timeformat=unixtime&timezone=auto&forecast_days=4&past_days=1';
     return fetch(url).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(function (d) {
       var h = d.hourly;
-      store.wx = { ts: Date.now(), lat: store.loc.lat, lon: store.loc.lon, off: d.utc_offset_seconds || 0, time: h.time, t: h.temperature_2m, at: h.apparent_temperature, pr: h.precipitation, wi: h.wind_speed_10m };
+      store.wx = { ts: Date.now(), lat: WX_LOC.lat, lon: WX_LOC.lon, off: d.utc_offset_seconds || 0, time: h.time, t: h.temperature_2m, at: h.apparent_temperature, pr: h.precipitation, wi: h.wind_speed_10m };
       saveStore();
     });
   }
@@ -888,22 +882,24 @@
         }
         if (!a.length) return;
         var mean = function (x) { return x.reduce(function (p, q) { return p + q; }, 0) / x.length; };
-        var label = k < 0 ? 'Jetzt (Nacht)' : (k < 3 ? names[k] : wd[new Date((st + off) * 1000).getUTCDay()]) + ' ' + sg[0];
+        var label = k < 0 ? 'Diese Nacht' : (k < 3 ? names[k] : wd[new Date((st + off) * 1000).getUTCDay()]) + ' ' + sg[0];
         if (k === 0 && sg[0] === 'Nacht') label = 'Heute Nacht';
-        out.push({ label: label, night: sg[0] === 'Nacht', tmin: Math.min.apply(null, t), tmax: Math.max.apply(null, t),
+        out.push({ k: k, label: label, night: sg[0] === 'Nacht', tmin: Math.min.apply(null, t), tmax: Math.max.apply(null, t),
                    amin: Math.min.apply(null, a), amean: mean(a), rain: pr, wind: wi });
       });
     }
-    return out.slice(0, 6);
+    var nightDone = false;
+    return out.filter(function (g) {
+      if (g.night && g.k <= 0 && !nightDone) { nightDone = true; return true; }
+      return !g.night && g.k === 1;
+    });
   }
 
   function renderWx() {
     var clipSel = $('clipSel'); clipSel.value = wxClip();
-    $('wxLocBtn').textContent = store.loc ? 'Ort: ' + store.loc.name : 'Ort wählen';
     var body = $('wxBody'), age = $('wxAge');
-    if (!store.loc) { body.innerHTML = '<p class="sub">Wähle den Ort des Stalls, dann bekommst du Wetter und Deckenempfehlung für die nächsten Tage.</p>'; age.textContent = ''; return; }
     var wx = store.wx;
-    if (!wx || wx.lat !== store.loc.lat || wx.lon !== store.loc.lon) { body.innerHTML = '<p class="sub">Wetter wird geladen …</p>'; age.textContent = ''; return; }
+    if (!wx || wx.lat !== WX_LOC.lat || wx.lon !== WX_LOC.lon) { body.innerHTML = '<p class="sub">Wetter wird geladen …</p>'; age.textContent = ''; return; }
     var clip = wxClip(), segs = wxSegments(wx), html = '';
     if (!segs.length) { body.innerHTML = '<p class="sub">Keine Wetterdaten für die nächsten Stunden.</p>'; return; }
     segs.forEach(function (g) {
@@ -928,25 +924,6 @@
       if (!store.wx) $('wxBody').innerHTML = '<p class="sub">Wetter konnte nicht geladen werden. Bist du online?</p>';
       else $('wxAge').textContent = 'offline, alter Stand';
     });
-  }
-
-  function wxSearchPlace() {
-    var q = $('wxQuery').value.trim(); if (!q) return;
-    $('wxRes').textContent = 'Suche …';
-    fetch('https://geocoding-api.open-meteo.com/v1/search?name=' + encodeURIComponent(q) + '&count=5&language=de&format=json')
-      .then(function (r) { return r.json(); }).then(function (d) {
-        var host = $('wxRes'); host.innerHTML = '';
-        if (!d.results || !d.results.length) { host.textContent = 'Nichts gefunden. Versuche den Ortsnamen.'; return; }
-        d.results.forEach(function (x) {
-          var b = document.createElement('button'); b.type = 'button'; b.className = 'chip';
-          b.textContent = x.name + (x.admin1 ? ', ' + x.admin1 : '') + (x.country_code ? ' (' + x.country_code + ')' : '');
-          b.addEventListener('click', function () {
-            store.loc = { name: x.name, lat: Math.round(x.latitude * 1000) / 1000, lon: Math.round(x.longitude * 1000) / 1000 };
-            store.wx = null; saveStore(); host.innerHTML = ''; $('wxLoc').hidden = true; wxUpdate(true);
-          });
-          host.appendChild(b);
-        });
-      }).catch(function () { $('wxRes').textContent = 'Die Suche hat nicht geklappt. Bist du online?'; });
   }
 
   // ---------- Daten sichern ----------
@@ -1002,9 +979,6 @@
   $('wipeBtn').addEventListener('click', doWipe);
   $('moreBtn').addEventListener('click', function () { tableLimit += 200; render(); });
   $('clipSel').addEventListener('change', function () { store.clip = store.clip || {}; store.clip[sel] = $('clipSel').value; saveStore(); renderWx(); });
-  $('wxLocBtn').addEventListener('click', function () { $('wxLoc').hidden = !$('wxLoc').hidden; if (!$('wxLoc').hidden) $('wxQuery').focus(); });
-  $('wxSearch').addEventListener('click', wxSearchPlace);
-  $('wxQuery').addEventListener('keydown', function (e) { if (e.key === 'Enter') wxSearchPlace(); });
   $('wxRefresh').addEventListener('click', function () { wxUpdate(true); });
   $('chips').addEventListener('click', function (e) {
     var r = e.target && e.target.getAttribute && e.target.getAttribute('data-r');
