@@ -78,6 +78,19 @@
   }
   .tab[aria-selected="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 
+
+  /* Farbwelt je Pferd: Ashley braun, Donni hell (Schimmel). Der Streifen oben bleibt beim Scrollen sichtbar. */
+  :root[data-horse="ashley"] {
+    --bg: #f1e7dc; --surface: #fffaf4; --ink: #2d1d12; --muted: #6b5645; --line: #d9c5b0; --soft: #e8d8c6;
+    --accent: #7b4a26;
+  }
+  :root[data-horse="donni"] {
+    --bg: #f8f9fb; --surface: #ffffff; --ink: #1c2330; --muted: #5a6575; --line: #d7dde5; --soft: #e8ecf1;
+    --accent: #56677f;
+  }
+  body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 6px; background: var(--accent); z-index: 50; }
+  .tab[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+
   .demo { border: 1px dashed var(--muted); border-radius: 8px; padding: 8px 12px; color: var(--muted); font-size: 13px; }
 
   .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
@@ -554,12 +567,22 @@
     return { x0: start, x1: end };
   }
 
+  // Farbwelt passend zur gewählten Decke
+  function applyHorse() {
+    var h = /ashley/i.test(sel) ? 'ashley' : /donn[iy]/i.test(sel) ? 'donni' : '';
+    var root = document.documentElement;
+    if (h) root.setAttribute('data-horse', h); else root.removeAttribute('data-horse');
+    var m = document.querySelector('meta[name="theme-color"]');
+    if (m) m.setAttribute('content', h === 'ashley' ? '#f1e7dc' : h === 'donni' ? '#f8f9fb' : '#f5f8f6');
+  }
+
   function renderTabs() {
     var host = $('tabs');
     host.innerHTML = '';
     var list = slots();
     if (list.length && list.indexOf(sel) < 0) sel = list[0];
     host.hidden = !list.length;
+    applyHorse();
     list.forEach(function (n) {
       var b = document.createElement('button');
       b.type = 'button'; b.className = 'tab'; b.setAttribute('role', 'tab');
