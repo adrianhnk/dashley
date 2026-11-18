@@ -110,9 +110,8 @@ static uint16_t count = 0;
 static uint32_t lastMeasMs = 0, lastFlushMs = 0;
 static bool dirty = false;
 
-static inline Rec &recAt(uint16_t i) {          // i = 0: ältester Eintrag
-  return recs[(head + MAX_RECORDS - count + i) % MAX_RECORDS];
-}
+// i = 0: ältester Eintrag (als Makro, weil die Arduino IDE sonst vor der Definition von "Rec" einen Prototyp einfügt)
+#define recAt(i) recs[(head + MAX_RECORDS - count + (i)) % MAX_RECORDS]
 
 static void storeRecord(float t, float rh) {
   uint32_t u = upSec();
