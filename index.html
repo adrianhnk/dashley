@@ -245,6 +245,20 @@
   </section>
   </div>
 
+  <section class="card">
+    <div class="head">
+      <h2>Messwerte</h2>
+      <div class="legend"><span><i class="sw" style="background:var(--hi-bg);border:1px solid var(--hi)"></i>höchster Wert</span><span><i class="sw" style="background:var(--lo-bg);border:1px solid var(--lo)"></i>niedrigster Wert</span></div>
+    </div>
+    <div class="tablewrap">
+      <table id="tbl">
+        <thead><tr><th>Zeit</th><th class="num">Temp.<br>°C</th><th class="num">Feuchte<br>%</th><th class="num">Taupunkt<br>°C</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="tfoot"><span id="tblInfo"></span><button class="btn" type="button" id="moreBtn" hidden>Mehr anzeigen</button></div>
+  </section>
+
   <section class="card" id="wxCard">
     <div class="head">
       <h2>Wetter in Königslutter und Deckenempfehlung</h2>
@@ -262,20 +276,6 @@
     </div>
     <div id="wxBody"></div>
     <p class="wxnote">Richtwerte für die Decke draußen, abgeleitet aus Herstellerangaben. Wetterdaten von Open-Meteo. Fühl zusätzlich unter der Decke an Schulter und Flanke nach.</p>
-  </section>
-
-  <section class="card">
-    <div class="head">
-      <h2>Messwerte</h2>
-      <div class="legend"><span><i class="sw" style="background:var(--hi-bg);border:1px solid var(--hi)"></i>höchster Wert</span><span><i class="sw" style="background:var(--lo-bg);border:1px solid var(--lo)"></i>niedrigster Wert</span></div>
-    </div>
-    <div class="tablewrap">
-      <table id="tbl">
-        <thead><tr><th>Zeit</th><th class="num">Temp.<br>°C</th><th class="num">Feuchte<br>%</th><th class="num">Taupunkt<br>°C</th></tr></thead>
-        <tbody></tbody>
-      </table>
-    </div>
-    <div class="tfoot"><span id="tblInfo"></span><button class="btn" type="button" id="moreBtn" hidden>Mehr anzeigen</button></div>
   </section>
 
   <details class="card" id="dataBox">
