@@ -402,6 +402,7 @@
     session = null; busy = false; $('connectBtn').disabled = false;
     setStatus(slotLabel(h.name) + ': ' + (h.v3
       ? (added ? (added === 1 ? '1 neuer Messwert abgeholt.' : added + ' neue Messwerte abgeholt.') : 'Keine neuen Messwerte.')
+      + (h.total != null ? ' (Decke: ' + h.total + ' Werte gespeichert' + (h.fails ? ', ' + h.fails + ' Sensor-Lesefehler' : '') + ')' : '')
       : n + ' Messwerte abgeholt, ' + added + ' neu.'), 'ok');
     render();
   }
@@ -410,8 +411,8 @@
     if (!session) return;
     var p = line.trim().split(',');
     if (p[0] === 'H') {
-      if (!/^H,[^,]+,\d+,\d+,\d+(,\d+)?$/.test(line.trim())) { session.bad = (session.bad || 0) + 1; return; }   // verstümmelte Kopfzeile
-      session.header = { name: p[1] || session.devName, count: +p[2], interval: +p[3] || 3600, age: +p[4] || 0, v3: p[5] === '3' };
+      if (!/^H,[^,]+,\d+,\d+,\d+(,\d+){0,3}$/.test(line.trim())) { session.bad = (session.bad || 0) + 1; return; }   // verstümmelte Kopfzeile
+      session.header = { name: p[1] || session.devName, count: +p[2], interval: +p[3] || 3600, age: +p[4] || 0, v3: p[5] === '3', total: p[6] === undefined ? null : +p[6], fails: p[7] === undefined ? null : +p[7] };
       session.t0 = Date.now();
       setStatus('Lese Messwerte … 0 von ' + session.header.count);
     } else if (p[0] === 'D') {

@@ -109,6 +109,7 @@ static uint16_t head = 0;            // nächster Schreibplatz
 static uint16_t count = 0;
 static uint32_t lastMeasMs = 0, lastFlushMs = 0;
 static bool dirty = false;
+static uint32_t sensorFails = 0;     // Messungen, bei denen der Sensor nicht geantwortet hat (zur Diagnose)
 
 // i = 0: ältester Eintrag (als Makro, weil die Arduino IDE sonst vor der Definition von "Rec" einen Prototyp einfügt)
 #define recAt(i) recs[(head + MAX_RECORDS - count + (i)) % MAX_RECORDS]
@@ -125,10 +126,12 @@ static void storeRecord(float t, float rh) {
 
 static void measureNow() {
   float t, rh;
-  for (int tries = 0; tries < 3; tries++) {
-    if (readSHT40(t, rh)) { storeRecord(t, rh); break; }
-    delay(20);
+  bool ok = false;
+  for (int tries = 0; tries < 3 && !ok; tries++) {
+    if (readSHT40(t, rh)) { storeRecord(t, rh); ok = true; }
+    else delay(20);
   }
+  if (!ok) sensorFails++;
   lastMeasMs = millis();       // auch bei Fehlschlag, sonst Dauermessen
 }
 
@@ -257,8 +260,10 @@ static void sendAll(uint32_t since) {
     if (!(r.ts & PROV) && r.ts > since) n++;
   }
   uint32_t nowUnix = epochBase ? epochBase + upSec() : 0;
-  snprintf(line, sizeof(line), "H,%s,%lu,%lu,%lu,3\n", BLANKET_NAME,
-           (unsigned long)n, (unsigned long)MEAS_INTERVAL_S, (unsigned long)nowUnix);
+  // Kopfzeile: Name, Anzahl folgender Werte, Intervall, Uhrzeit, Version, gespeicherte Werte gesamt, Sensor-Lesefehler
+  snprintf(line, sizeof(line), "H,%s,%lu,%lu,%lu,3,%u,%lu\n", BLANKET_NAME,
+           (unsigned long)n, (unsigned long)MEAS_INTERVAL_S, (unsigned long)nowUnix,
+           (unsigned)count, (unsigned long)sensorFails);
   if (!sendLine(line)) return;
   for (uint16_t i = 0; i < count; i++) {
     const Rec &r = recAt(i);
