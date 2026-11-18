@@ -91,6 +91,14 @@
   body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 6px; background: var(--accent); z-index: 50; }
   .tab[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 
+  /* Höchster und niedrigster Wert der letzten Auslesung */
+  .mm { display: grid; grid-template-columns: auto 1fr 1fr; gap: 6px 14px; align-items: baseline; font-variant-numeric: tabular-nums; }
+  .mm .h { font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+  .mm .n { font-weight: 500; color: var(--muted); }
+  .mm .v { font-family: var(--font-head); font-weight: 600; font-size: 20px; line-height: 1.2; }
+  .mm .v small { display: block; font-family: var(--font-text); font-weight: 400; font-size: 12px; color: var(--muted); }
+  .mm .hi { color: var(--hi); } .mm .lo { color: var(--lo); }
+
   /* Wetter und Deckenempfehlung */
   .wxset { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-bottom: 6px; }
   .wxset label { font-size: 14px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
@@ -217,6 +225,14 @@
     <div class="tile"><div class="lab">Klima</div><span class="pill ok" id="pill">–</span><div class="note" id="nK"></div></div>
   </section>
 
+  <section class="card" id="lastCard" hidden>
+    <div class="head">
+      <h2>Letzte Auslesung</h2>
+      <div class="synced" id="lastInfo"></div>
+    </div>
+    <div class="mm" id="lastMM"></div>
+  </section>
+
   <div class="bar">
     <div class="chips" id="chips" role="group" aria-label="Zeitraum">
       <button class="chip" type="button" data-r="24h" aria-pressed="true">24 Std.</button>
@@ -275,7 +291,7 @@
       <button class="btn" type="button" id="wxRefresh">Aktualisieren</button>
     </div>
     <div id="wxBody"></div>
-    <p class="wxnote">Richtwerte für die Decke draußen, abgeleitet aus Herstellerangaben. Wetterdaten von Open-Meteo. Fühl zusätzlich unter der Decke an Schulter und Flanke nach.</p>
+    <p class="wxnote">Für Pferde im geschlossenen Stall (ohne Wind und Regen). Annahme: Der Stall ist etwa 2 °C wärmer als draußen. Richtwerte aus Herstellerangaben, Wetterdaten von Open-Meteo. Fühl zusätzlich unter der Decke an Schulter und Flanke nach.</p>
   </section>
 
   <details class="card" id="dataBox">
@@ -441,6 +457,7 @@
     var b = blanket(h.name);
     b.intervalS = h.interval || b.intervalS;
     var added = mergeRecords(b, incoming, Math.max(h.interval, 30) * 500);
+    if (added > 0 || b.prevSync == null) b.prevSync = b.lastSync || 0;   // Fenster der "letzten Auslesung"
     b.lastSync = Date.now();
     if (h.mv >= 2500 && h.mv <= 5000) { b.vbat = h.mv / 1000; b.vbatTs = Date.now(); }
     sel = h.name; store.sel = sel;
@@ -668,6 +685,34 @@
     $('synced').textContent += d.demo ? '' : batteryText(store.blankets[sel]);
   }
 
+  // Höchster und niedrigster Wert der Messungen seit der vorherigen Auslesung
+  function shortDT(ts) {
+    var d = new Date(ts), p = function (n) { return (n < 10 ? '0' : '') + n; };
+    return p(d.getDate()) + '.' + p(d.getMonth() + 1) + '. ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  }
+  function renderLast(d, recs) {
+    var card = $('lastCard');
+    var b = store.blankets[sel];
+    if (d.demo || !b || !b.lastSync || !recs.length) { card.hidden = true; return; }
+    var since = b.prevSync != null ? b.prevSync : b.lastSync - 24 * 3600e3;
+    var batch = recs.filter(function (r) { return r.ts > since; });
+    card.hidden = false;
+    var host = $('lastMM');
+    if (!batch.length) { $('lastInfo').textContent = ''; host.style.display = 'block'; host.textContent = 'Bei der letzten Auslesung kamen keine neuen Messwerte.'; return; }
+    host.style.display = '';
+    $('lastInfo').textContent = shortDT(batch[0].ts) + ' bis ' + shortDT(batch[batch.length - 1].ts) + ' · ' + batch.length + (batch.length === 1 ? ' Wert' : ' Werte');
+    var rows = [['Temperatur', 't', 1, '°C'], ['Luftfeuchte', 'rh', 0, '%'], ['Taupunkt', 'td', 1, '°C']];
+    var html = '<div class="h"></div><div class="h">Höchster</div><div class="h">Niedrigster</div>';
+    rows.forEach(function (rw) {
+      var hi = batch[0], lo = batch[0];
+      batch.forEach(function (r) { if (r[rw[1]] > hi[rw[1]]) hi = r; if (r[rw[1]] < lo[rw[1]]) lo = r; });
+      html += '<div class="n">' + rw[0] + '</div>'
+        + '<div class="v hi">' + fmt(hi[rw[1]], rw[2]) + ' ' + rw[3] + '<small>' + shortDT(hi.ts) + '</small></div>'
+        + '<div class="v lo">' + fmt(lo[rw[1]], rw[2]) + ' ' + rw[3] + '<small>' + shortDT(lo.ts) + '</small></div>';
+    });
+    host.innerHTML = html;
+  }
+
   // ---------- Ansicht: Diagramme (eigene SVG-Zeichnung, keine Bibliothek) ----------
   function niceTicks(min, max, n) {
     if (!(max > min)) { max = min + 1; }
@@ -830,6 +875,7 @@
     var w = windowOf(recs, d.demo);
     $('demo').hidden = !d.demo;
     renderTiles(d, recs, w);
+    renderLast(d, recs);
     renderCharts(d, recs, w);
     renderTable(recs, w);
     renderWx();
@@ -837,13 +883,14 @@
   }
 
   // ---------- Wetter und Deckenempfehlung ----------
+  var STALL_PLUS = 2;   // Annahme: geschlossener, unbeheizter Stall ist ca. 2 °C wärmer als draußen
   var WX_LEVELS = [
     { n: 'keine Decke nötig', g: '' },
-    { n: 'Regen-/Abschwitzdecke', g: '0 g' },
-    { n: 'leichte Decke', g: 'ca. 100 g' },
-    { n: 'mittlere Decke', g: '200–300 g' },
-    { n: 'schwere Decke', g: 'ab 350 g' },
-    { n: 'extra schwere Decke', g: '400 g und mehr' }
+    { n: 'Abschwitz- oder dünne Stalldecke', g: '0 g' },
+    { n: 'leichte Stalldecke', g: 'ca. 100 g' },
+    { n: 'mittlere Stalldecke', g: '200–300 g' },
+    { n: 'schwere Stalldecke', g: 'ab 350 g' },
+    { n: 'extra schwere Stalldecke', g: '400 g und mehr' }
   ];
   function wxLevel(eff, clip) {
     if (clip === 'full') return eff >= 18 ? 0 : eff >= 10 ? 1 : eff >= 5 ? 2 : eff >= 0 ? 3 : eff >= -7 ? 4 : 5;
@@ -885,7 +932,7 @@
         var label = k < 0 ? 'Diese Nacht' : (k < 3 ? names[k] : wd[new Date((st + off) * 1000).getUTCDay()]) + ' ' + sg[0];
         if (k === 0 && sg[0] === 'Nacht') label = 'Heute Nacht';
         out.push({ k: k, label: label, night: sg[0] === 'Nacht', tmin: Math.min.apply(null, t), tmax: Math.max.apply(null, t),
-                   amin: Math.min.apply(null, a), amean: mean(a), rain: pr, wind: wi });
+                   tmean: mean(t), amin: Math.min.apply(null, a), amean: mean(a), rain: pr, wind: wi });
       });
     }
     var nightDone = false;
@@ -903,14 +950,13 @@
     var clip = wxClip(), segs = wxSegments(wx), html = '';
     if (!segs.length) { body.innerHTML = '<p class="sub">Keine Wetterdaten für die nächsten Stunden.</p>'; return; }
     segs.forEach(function (g) {
-      var eff = g.night ? g.amin : g.amean, rain = g.rain >= 1;
-      var lv = wxLevel(eff - (rain ? 3 : 0), clip);
+      // Stallhaltung: kein Wind, kein Regen. Es zählt die Lufttemperatur plus Stallzuschlag.
+      var eff = (g.night ? g.tmin : g.tmean) + STALL_PLUS;
+      var lv = wxLevel(eff, clip);
       var txt = WX_LEVELS[lv].n + (WX_LEVELS[lv].g ? ' (' + WX_LEVELS[lv].g + ')' : '');
       if (clip !== 'full' && lv > 0) txt = 'ggf. ' + txt;
       var rg = Math.round(g.tmin) === Math.round(g.tmax) ? fmt(g.tmin, 0) : fmt(g.tmin, 0) + ' bis ' + fmt(g.tmax, 0);
-      var det = rg + ' °C · gefühlt ' + (g.night ? 'tiefstens ' + fmt(g.amin, 0) : 'im Schnitt ' + fmt(g.amean, 0)) + ' °C'
-        + ' · Wind bis ' + fmt(g.wind, 0) + ' km/h'
-        + (rain ? ' · Regen ' + fmt(g.rain, 1) + ' mm: wasserdichte Decke' : '');
+      var det = 'Draußen ' + rg + ' °C · im Stall geschätzt ' + (g.night ? 'tiefstens ' : 'im Schnitt ') + fmt(eff, 0) + ' °C';
       html += '<div class="wxrow"><div class="l"><b>' + g.label + '</b></div><div class="r">' + txt + '</div><small>' + det + '</small></div>';
     });
     body.innerHTML = html;
