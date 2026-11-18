@@ -455,7 +455,7 @@
       if (!session) return;
       fail(session.header
         ? 'Übertragung abgebrochen nach ' + session.rows.length + ' von ' + session.header.count + ' Messwerten. Versuche es noch einmal. (Zuletzt empfangen: ' + (session.raw || '').replace(/\s+/g, ' ').slice(-60) + ')'
-        : 'Keine Antwort von der Decke. Versuche es noch einmal.');
+        : 'Keine Antwort von der Decke. Versuche es noch einmal.' + (session.raw ? ' (Zuletzt empfangen: ' + session.raw.replace(/\s+/g, ' ').slice(-60) + ')' : ''));
     }, 15000);
   }
   // Zeitstempel (Sekunden) des letzten bekannten Messwerts dieser Decke; die Decke schickt nur Neueres
