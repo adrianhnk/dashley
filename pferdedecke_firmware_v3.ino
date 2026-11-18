@@ -21,8 +21,8 @@ using namespace Adafruit_LittleFS_Namespace;
 #define FLUSH_INTERVAL_S 21600UL     // Flash alle 6 h sichern; zum Testen 300 (5 min) einstellen
 
 // ---------- Software-I2C (Rohpins) ----------
-#define SDA_PIN NRF_GPIO_PIN_MAP(0, 17)
-#define SCL_PIN NRF_GPIO_PIN_MAP(0, 20)
+#define SDA_PIN NRF_GPIO_PIN_MAP(0, 20)
+#define SCL_PIN NRF_GPIO_PIN_MAP(0, 17)
 #define I2C_T   5
 #define SHT_ADDR 0x44
 

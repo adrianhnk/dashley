@@ -11,8 +11,8 @@
 #define MAX_RECORDS    336           // 336 Stunden = 14 Tage
 
 // ---------- Software-I2C (Rohpins) ----------
-#define SDA_PIN NRF_GPIO_PIN_MAP(0, 17)
-#define SCL_PIN NRF_GPIO_PIN_MAP(0, 20)
+#define SDA_PIN NRF_GPIO_PIN_MAP(0, 20)
+#define SCL_PIN NRF_GPIO_PIN_MAP(0, 17)
 #define I2C_T   5
 #define SHT_ADDR 0x44
 
