@@ -91,6 +91,20 @@
   body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 6px; background: var(--accent); z-index: 50; }
   .tab[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 
+  /* Wetter und Deckenempfehlung */
+  .wxset { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-bottom: 6px; }
+  .wxset label { font-size: 14px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  .wxset select, .wxloc input { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; min-height: 40px; }
+  .wxloc { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0; }
+  .wxloc input { flex: 1 1 180px; min-width: 0; }
+  .wxres { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+  .wxrow { display: grid; grid-template-columns: 1fr auto; gap: 2px 14px; padding: 10px 0; border-top: 1px solid var(--line); align-items: baseline; }
+  .wxrow:first-child { border-top: 0; }
+  .wxrow b { font-weight: 600; }
+  .wxrow .r { text-align: right; font-weight: 600; color: var(--accent); }
+  .wxrow small { grid-column: 1 / -1; color: var(--muted); font-size: 12.5px; }
+  .wxnote { font-size: 12.5px; color: var(--muted); margin: 8px 0 0; }
+
   .demo { border: 1px dashed var(--muted); border-radius: 8px; padding: 8px 12px; color: var(--muted); font-size: 13px; }
 
   .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
@@ -201,6 +215,31 @@
     <div class="tile h"><div class="lab">Luftfeuchte</div><div class="val" id="vH">–</div><div class="note" id="nH"></div></div>
     <div class="tile d"><div class="lab">Taupunkt</div><div class="val" id="vD">–</div><div class="note" id="nD"></div></div>
     <div class="tile"><div class="lab">Klima</div><span class="pill ok" id="pill">–</span><div class="note" id="nK"></div></div>
+  </section>
+
+  <section class="card" id="wxCard">
+    <div class="head">
+      <h2>Wetter und Deckenempfehlung</h2>
+      <div class="synced" id="wxAge"></div>
+    </div>
+    <div class="wxset">
+      <label>Schur
+        <select id="clipSel" aria-label="Schur des Pferdes">
+          <option value="full">vollgeschoren</option>
+          <option value="trace">Teilschur</option>
+          <option value="none">ungeschoren</option>
+        </select>
+      </label>
+      <button class="btn" type="button" id="wxLocBtn">Ort wählen</button>
+      <button class="btn" type="button" id="wxRefresh">Aktualisieren</button>
+    </div>
+    <div class="wxloc" id="wxLoc" hidden>
+      <input type="text" id="wxQuery" placeholder="Ort oder Postleitzahl" autocomplete="off" aria-label="Ort">
+      <button class="btn primary" type="button" id="wxSearch">Suchen</button>
+    </div>
+    <div class="wxres" id="wxRes"></div>
+    <div id="wxBody"></div>
+    <p class="wxnote">Richtwerte für die Decke draußen, abgeleitet aus Herstellerangaben. Wetterdaten von Open-Meteo. Fühl zusätzlich unter der Decke an Schulter und Flanke nach.</p>
   </section>
 
   <div class="bar">
@@ -799,7 +838,115 @@
     renderTiles(d, recs, w);
     renderCharts(d, recs, w);
     renderTable(recs, w);
+    renderWx();
     $('chips').querySelectorAll('.chip').forEach(function (c) { c.setAttribute('aria-pressed', c.getAttribute('data-r') === range ? 'true' : 'false'); });
+  }
+
+  // ---------- Wetter und Deckenempfehlung ----------
+  var WX_LEVELS = [
+    { n: 'keine Decke nötig', g: '' },
+    { n: 'Regen-/Abschwitzdecke', g: '0 g' },
+    { n: 'leichte Decke', g: 'ca. 100 g' },
+    { n: 'mittlere Decke', g: '200–300 g' },
+    { n: 'schwere Decke', g: 'ab 350 g' },
+    { n: 'extra schwere Decke', g: '400 g und mehr' }
+  ];
+  function wxLevel(eff, clip) {
+    if (clip === 'full') return eff >= 18 ? 0 : eff >= 10 ? 1 : eff >= 5 ? 2 : eff >= 0 ? 3 : eff >= -7 ? 4 : 5;
+    return eff >= 7 ? 0 : eff >= -1 ? 2 : eff >= -9 ? 4 : 5;
+  }
+  function wxClip() { return (store.clip && store.clip[sel]) || 'full'; }
+
+  function wxFetch(force) {
+    if (!store.loc) return Promise.resolve();
+    var c = store.wx;
+    if (!force && c && c.lat === store.loc.lat && c.lon === store.loc.lon && Date.now() - c.ts < 30 * 60 * 1000) return Promise.resolve();
+    var url = 'https://api.open-meteo.com/v1/forecast?latitude=' + store.loc.lat + '&longitude=' + store.loc.lon +
+      '&hourly=temperature_2m,apparent_temperature,precipitation,wind_speed_10m&timeformat=unixtime&timezone=auto&forecast_days=4&past_days=1';
+    return fetch(url).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(function (d) {
+      var h = d.hourly;
+      store.wx = { ts: Date.now(), lat: store.loc.lat, lon: store.loc.lon, off: d.utc_offset_seconds || 0, time: h.time, t: h.temperature_2m, at: h.apparent_temperature, pr: h.precipitation, wi: h.wind_speed_10m };
+      saveStore();
+    });
+  }
+
+  // Zeitfenster Tag (8–18 Uhr) und Nacht (18–8 Uhr) ab jetzt
+  function wxSegments(wx) {
+    var now = Date.now() / 1000, off = wx.off || 0, H = 3600;
+    var day0 = Math.floor((now + off) / 86400) * 86400 - off;
+    var names = ['Heute', 'Morgen', 'Übermorgen'], wd = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'], out = [];
+    for (var k = -1; k < 4; k++) {
+      [['Tag', 8, 18], ['Nacht', 18, 32]].forEach(function (sg) {
+        var st = day0 + k * 86400 + sg[1] * H, en = day0 + k * 86400 + sg[2] * H;
+        if (en <= now || st > now + 72 * H) return;
+        var a = [], t = [], pr = 0, wi = 0;
+        for (var i = 0; i < wx.time.length; i++) {
+          var ts = wx.time[i];
+          if (ts + H > Math.max(st, now) && ts < en && wx.at[i] != null) {
+            a.push(wx.at[i]); t.push(wx.t[i]); pr += wx.pr[i] || 0; wi = Math.max(wi, wx.wi[i] || 0);
+          }
+        }
+        if (!a.length) return;
+        var mean = function (x) { return x.reduce(function (p, q) { return p + q; }, 0) / x.length; };
+        var label = k < 0 ? 'Jetzt (Nacht)' : (k < 3 ? names[k] : wd[new Date((st + off) * 1000).getUTCDay()]) + ' ' + sg[0];
+        if (k === 0 && sg[0] === 'Nacht') label = 'Heute Nacht';
+        out.push({ label: label, night: sg[0] === 'Nacht', tmin: Math.min.apply(null, t), tmax: Math.max.apply(null, t),
+                   amin: Math.min.apply(null, a), amean: mean(a), rain: pr, wind: wi });
+      });
+    }
+    return out.slice(0, 6);
+  }
+
+  function renderWx() {
+    var clipSel = $('clipSel'); clipSel.value = wxClip();
+    $('wxLocBtn').textContent = store.loc ? 'Ort: ' + store.loc.name : 'Ort wählen';
+    var body = $('wxBody'), age = $('wxAge');
+    if (!store.loc) { body.innerHTML = '<p class="sub">Wähle den Ort des Stalls, dann bekommst du Wetter und Deckenempfehlung für die nächsten Tage.</p>'; age.textContent = ''; return; }
+    var wx = store.wx;
+    if (!wx || wx.lat !== store.loc.lat || wx.lon !== store.loc.lon) { body.innerHTML = '<p class="sub">Wetter wird geladen …</p>'; age.textContent = ''; return; }
+    var clip = wxClip(), segs = wxSegments(wx), html = '';
+    if (!segs.length) { body.innerHTML = '<p class="sub">Keine Wetterdaten für die nächsten Stunden.</p>'; return; }
+    segs.forEach(function (g) {
+      var eff = g.night ? g.amin : g.amean, rain = g.rain >= 1;
+      var lv = wxLevel(eff - (rain ? 3 : 0), clip);
+      var txt = WX_LEVELS[lv].n + (WX_LEVELS[lv].g ? ' (' + WX_LEVELS[lv].g + ')' : '');
+      if (clip !== 'full' && lv > 0) txt = 'ggf. ' + txt;
+      var rg = Math.round(g.tmin) === Math.round(g.tmax) ? fmt(g.tmin, 0) : fmt(g.tmin, 0) + ' bis ' + fmt(g.tmax, 0);
+      var det = rg + ' °C · gefühlt ' + (g.night ? 'tiefstens ' + fmt(g.amin, 0) : 'im Schnitt ' + fmt(g.amean, 0)) + ' °C'
+        + ' · Wind bis ' + fmt(g.wind, 0) + ' km/h'
+        + (rain ? ' · Regen ' + fmt(g.rain, 1) + ' mm: wasserdichte Decke' : '');
+      html += '<div class="wxrow"><div class="l"><b>' + g.label + '</b></div><div class="r">' + txt + '</div><small>' + det + '</small></div>';
+    });
+    body.innerHTML = html;
+    var mins = Math.round((Date.now() - wx.ts) / 60000);
+    age.textContent = 'Stand vor ' + (mins < 1 ? 'wenigen Sekunden' : mins < 90 ? mins + ' Min.' : Math.round(mins / 60) + ' Std.');
+  }
+
+  function wxUpdate(force) {
+    renderWx();
+    return wxFetch(force).then(renderWx).catch(function () {
+      if (!store.wx) $('wxBody').innerHTML = '<p class="sub">Wetter konnte nicht geladen werden. Bist du online?</p>';
+      else $('wxAge').textContent = 'offline, alter Stand';
+    });
+  }
+
+  function wxSearchPlace() {
+    var q = $('wxQuery').value.trim(); if (!q) return;
+    $('wxRes').textContent = 'Suche …';
+    fetch('https://geocoding-api.open-meteo.com/v1/search?name=' + encodeURIComponent(q) + '&count=5&language=de&format=json')
+      .then(function (r) { return r.json(); }).then(function (d) {
+        var host = $('wxRes'); host.innerHTML = '';
+        if (!d.results || !d.results.length) { host.textContent = 'Nichts gefunden. Versuche den Ortsnamen.'; return; }
+        d.results.forEach(function (x) {
+          var b = document.createElement('button'); b.type = 'button'; b.className = 'chip';
+          b.textContent = x.name + (x.admin1 ? ', ' + x.admin1 : '') + (x.country_code ? ' (' + x.country_code + ')' : '');
+          b.addEventListener('click', function () {
+            store.loc = { name: x.name, lat: Math.round(x.latitude * 1000) / 1000, lon: Math.round(x.longitude * 1000) / 1000 };
+            store.wx = null; saveStore(); host.innerHTML = ''; $('wxLoc').hidden = true; wxUpdate(true);
+          });
+          host.appendChild(b);
+        });
+      }).catch(function () { $('wxRes').textContent = 'Die Suche hat nicht geklappt. Bist du online?'; });
   }
 
   // ---------- Daten sichern ----------
@@ -854,6 +1001,11 @@
   $('importBtn').addEventListener('click', doImport);
   $('wipeBtn').addEventListener('click', doWipe);
   $('moreBtn').addEventListener('click', function () { tableLimit += 200; render(); });
+  $('clipSel').addEventListener('change', function () { store.clip = store.clip || {}; store.clip[sel] = $('clipSel').value; saveStore(); renderWx(); });
+  $('wxLocBtn').addEventListener('click', function () { $('wxLoc').hidden = !$('wxLoc').hidden; if (!$('wxLoc').hidden) $('wxQuery').focus(); });
+  $('wxSearch').addEventListener('click', wxSearchPlace);
+  $('wxQuery').addEventListener('keydown', function (e) { if (e.key === 'Enter') wxSearchPlace(); });
+  $('wxRefresh').addEventListener('click', function () { wxUpdate(true); });
   $('chips').addEventListener('click', function (e) {
     var r = e.target && e.target.getAttribute && e.target.getAttribute('data-r');
     if (r) { range = r; render(); }
@@ -871,6 +1023,7 @@
     showNotice(purged + ' ungültige Messwerte (z. B. 0 % Feuchte) wurden aus dem Speicher entfernt.', false);
   }
   render();
+  wxUpdate(false);
 })();
 </script>
 </body>
