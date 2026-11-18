@@ -433,7 +433,9 @@
     if (!session) return;
     var v = ev.target.value;
     var bytes = new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
-    session.buf += session.dec.decode(bytes, { stream: true });
+    var chunk = session.dec.decode(bytes, { stream: true });
+    session.buf += chunk;
+    session.raw = ((session.raw || '') + chunk).slice(-90);
     armTimer();
     var idx;
     while ((idx = session.buf.indexOf('\n')) >= 0) {
@@ -451,7 +453,7 @@
     session.timer = setTimeout(function () {
       if (!session) return;
       fail(session.header
-        ? 'Übertragung abgebrochen nach ' + session.rows.length + ' von ' + session.header.count + ' Messwerten. Versuche es noch einmal.'
+        ? 'Übertragung abgebrochen nach ' + session.rows.length + ' von ' + session.header.count + ' Messwerten. Versuche es noch einmal. (Zuletzt empfangen: ' + (session.raw || '').replace(/\s+/g, ' ').slice(-60) + ')'
         : 'Keine Antwort von der Decke. Versuche es noch einmal.');
     }, 15000);
   }
@@ -463,8 +465,11 @@
   }
   async function sendG() {
     if (!session) return;
-    var cmd = 'G,' + Math.floor(Date.now() / 1000) + ',' + sinceFor(session.devName) + '\n';
-    try { await session.rx.writeValue(new TextEncoder().encode(cmd)); }
+    // zwei kurze Befehle (je unter 20 Byte): erst die Uhrzeit, dann "Gib mir alles, was neuer ist als ..."
+    try {
+      await session.rx.writeValue(new TextEncoder().encode('T,' + Math.floor(Date.now() / 1000) + '\n'));
+      await session.rx.writeValue(new TextEncoder().encode('G,' + sinceFor(session.devName) + '\n'));
+    }
     catch (e) { fail('Senden fehlgeschlagen: ' + (e && e.message ? e.message : e)); return; }
     if (!session) return;
     session.tries++;

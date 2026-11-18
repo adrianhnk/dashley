@@ -191,19 +191,30 @@ BLEUart bleuart;
 static char cmdBuf[48];
 static uint8_t cmdLen = 0;
 static volatile uint32_t reqUnix = 0, reqSince = 0;
-static volatile bool sendRequested = false;
+static volatile bool sendRequested = false, timeRequested = false;
 
+// Befehle der App (kurz, damit jeder in ein einziges Funkpaket passt):
+//   "T,<unix>"  Uhrzeit setzen
+//   "G,<seit>"  Messwerte abholen, die neuer als <seit> (Unix-Sekunden) sind; "G" allein = alle
+//   "G,<unix>,<seit>"  beides in einem (ältere App-Version)
 static void parseCmd() {
-  if (cmdBuf[0] != 'G') return;
-  uint32_t u = 0, s = 0;
+  char cmd = cmdBuf[0];
+  if (cmd != 'G' && cmd != 'T') return;
+  uint32_t a = 0, b = 0;
+  bool hasB = false;
   char *p = strchr(cmdBuf, ',');
   if (p) {
     char *q;
-    u = strtoul(p + 1, &q, 10);
-    if (*q == ',') s = strtoul(q + 1, NULL, 10);
+    a = strtoul(p + 1, &q, 10);
+    if (*q == ',') { b = strtoul(q + 1, NULL, 10); hasB = true; }
   }
-  reqUnix = u; reqSince = s;
-  sendRequested = true;                         // nur Flag setzen, Senden macht loop()
+  if (cmd == 'T') {
+    reqUnix = a; timeRequested = true;
+  } else if (hasB) {
+    reqUnix = a; reqSince = b; timeRequested = true; sendRequested = true;
+  } else {
+    reqSince = a; sendRequested = true;
+  }                                             // nur Flags setzen, Arbeit macht loop()
 }
 
 static void rx_cb(uint16_t conn_hdl) {
@@ -285,12 +296,13 @@ void setup() {
 
 void loop() {
   upSec();                                      // hält die Laufzeit über den millis()-Überlauf aktuell
+  if (timeRequested) {
+    timeRequested = false;
+    syncTime(reqUnix);
+  }
   if (sendRequested) {
     sendRequested = false;
-    if (Bluefruit.connected()) {
-      syncTime(reqUnix);
-      sendAll(reqSince);
-    }
+    if (Bluefruit.connected()) sendAll(reqSince);
   }
   if (millis() - lastMeasMs >= MEAS_INTERVAL_S * 1000UL) measureNow();
   if (dirty && !Bluefruit.connected() && millis() - lastFlushMs >= FLUSH_INTERVAL_S * 1000UL) flushToFlash();
