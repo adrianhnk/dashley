@@ -291,7 +291,7 @@
       <button class="btn" type="button" id="wxRefresh">Aktualisieren</button>
     </div>
     <div id="wxBody"></div>
-    <p class="wxnote">Nachts im geschlossenen Stall (ohne Wind und Regen, Annahme: etwa 2 °C wärmer als draußen), tagsüber auf dem Paddock. Richtwerte aus Herstellerangaben, Wetterdaten von Open-Meteo. Fühl zusätzlich unter der Decke an Schulter und Flanke nach.</p>
+    <p class="wxnote">Nachts im geschlossenen Stall (ohne Wind und Regen, Annahme: etwa 2 °C wärmer als draußen), tagsüber auf dem Paddock (9 bis 14 Uhr). Richtwerte aus Herstellerangaben, Wetterdaten von Open-Meteo. Fühl zusätzlich unter der Decke an Schulter und Flanke nach.</p>
   </section>
 
   <details class="card" id="dataBox">
@@ -919,13 +919,13 @@
     });
   }
 
-  // Zeitfenster Tag (8–18 Uhr) und Nacht (18–8 Uhr) ab jetzt
+  // Zeitfenster Tag auf dem Paddock (9–14 Uhr) und Nacht (18–8 Uhr) ab jetzt
   function wxSegments(wx) {
     var now = Date.now() / 1000, off = wx.off || 0, H = 3600;
     var day0 = Math.floor((now + off) / 86400) * 86400 - off;
     var names = ['Heute', 'Morgen', 'Übermorgen'], wd = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'], out = [];
     for (var k = -1; k < 4; k++) {
-      [['Tag', 8, 18], ['Nacht', 18, 32]].forEach(function (sg) {
+      [['Tag', 9, 14], ['Nacht', 18, 32]].forEach(function (sg) {
         var st = day0 + k * 86400 + sg[1] * H, en = day0 + k * 86400 + sg[2] * H;
         if (en <= now || st > now + 72 * H) return;
         var a = [], t = [], pr = 0, wi = 0;
