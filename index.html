@@ -291,7 +291,7 @@
       <button class="btn" type="button" id="wxRefresh">Aktualisieren</button>
     </div>
     <div id="wxBody"></div>
-    <p class="wxnote">Für Pferde im geschlossenen Stall (ohne Wind und Regen). Annahme: Der Stall ist etwa 2 °C wärmer als draußen. Richtwerte aus Herstellerangaben, Wetterdaten von Open-Meteo. Fühl zusätzlich unter der Decke an Schulter und Flanke nach.</p>
+    <p class="wxnote">Nachts im geschlossenen Stall (ohne Wind und Regen, Annahme: etwa 2 °C wärmer als draußen), tagsüber auf dem Paddock. Richtwerte aus Herstellerangaben, Wetterdaten von Open-Meteo. Fühl zusätzlich unter der Decke an Schulter und Flanke nach.</p>
   </section>
 
   <details class="card" id="dataBox">
@@ -892,6 +892,14 @@
     { n: 'schwere Stalldecke', g: 'ab 350 g' },
     { n: 'extra schwere Stalldecke', g: '400 g und mehr' }
   ];
+  var WX_OUT = [
+    { n: 'keine Decke nötig', g: '' },
+    { n: 'Regen- oder Abschwitzdecke', g: '0 g' },
+    { n: 'leichte Weidedecke', g: 'ca. 100 g' },
+    { n: 'mittlere Weidedecke', g: '200–300 g' },
+    { n: 'schwere Weidedecke', g: 'ab 350 g' },
+    { n: 'extra schwere Weidedecke', g: '400 g und mehr' }
+  ];
   function wxLevel(eff, clip) {
     if (clip === 'full') return eff >= 18 ? 0 : eff >= 10 ? 1 : eff >= 5 ? 2 : eff >= 0 ? 3 : eff >= -7 ? 4 : 5;
     return eff >= 7 ? 0 : eff >= -1 ? 2 : eff >= -9 ? 4 : 5;
@@ -931,15 +939,16 @@
         var mean = function (x) { return x.reduce(function (p, q) { return p + q; }, 0) / x.length; };
         var label = k < 0 ? 'Diese Nacht' : (k < 3 ? names[k] : wd[new Date((st + off) * 1000).getUTCDay()]) + ' ' + sg[0];
         if (k === 0 && sg[0] === 'Nacht') label = 'Heute Nacht';
-        out.push({ k: k, label: label, night: sg[0] === 'Nacht', tmin: Math.min.apply(null, t), tmax: Math.max.apply(null, t),
+        out.push({ st: st, k: k, label: label, night: sg[0] === 'Nacht', tmin: Math.min.apply(null, t), tmax: Math.max.apply(null, t),
                    tmean: mean(t), amin: Math.min.apply(null, a), amean: mean(a), rain: pr, wind: wi });
       });
     }
-    var nightDone = false;
-    return out.filter(function (g) {
-      if (g.night && g.k <= 0 && !nightDone) { nightDone = true; return true; }
-      return !g.night && g.k === 1;
+    var firstNight = null, firstDay = null;
+    out.forEach(function (g) {
+      if (g.night && !firstNight) firstNight = g;
+      if (!g.night && !firstDay) firstDay = g;
     });
+    return [firstDay, firstNight].filter(Boolean).sort(function (x, y) { return x.st - y.st; });
   }
 
   function renderWx() {
@@ -950,13 +959,21 @@
     var clip = wxClip(), segs = wxSegments(wx), html = '';
     if (!segs.length) { body.innerHTML = '<p class="sub">Keine Wetterdaten für die nächsten Stunden.</p>'; return; }
     segs.forEach(function (g) {
-      // Stallhaltung: kein Wind, kein Regen. Es zählt die Lufttemperatur plus Stallzuschlag.
-      var eff = (g.night ? g.tmin : g.tmean) + STALL_PLUS;
-      var lv = wxLevel(eff, clip);
-      var txt = WX_LEVELS[lv].n + (WX_LEVELS[lv].g ? ' (' + WX_LEVELS[lv].g + ')' : '');
+      var lv, names, det, rg = Math.round(g.tmin) === Math.round(g.tmax) ? fmt(g.tmin, 0) : fmt(g.tmin, 0) + ' bis ' + fmt(g.tmax, 0);
+      if (g.night) {
+        // Nacht im geschlossenen Stall: Lufttemperatur plus Stallzuschlag, kein Wind, kein Regen
+        var eff = g.tmin + STALL_PLUS;
+        lv = wxLevel(eff, clip); names = WX_LEVELS;
+        det = 'Im Stall. Draußen ' + rg + ' °C, im Stall geschätzt tiefstens ' + fmt(eff, 0) + ' °C';
+      } else {
+        // Tag auf dem Paddock: gefühlte Temperatur, bei Regen eine Stufe wärmer und wasserdicht
+        var rain = g.rain >= 1;
+        lv = wxLevel(g.amean - (rain ? 3 : 0), clip); names = WX_OUT;
+        det = 'Auf dem Paddock. ' + rg + ' °C, gefühlt im Schnitt ' + fmt(g.amean, 0) + ' °C · Wind bis ' + fmt(g.wind, 0) + ' km/h'
+          + (rain ? ' · Regen ' + fmt(g.rain, 1) + ' mm: wasserdichte Decke' : '');
+      }
+      var txt = names[lv].n + (names[lv].g ? ' (' + names[lv].g + ')' : '');
       if (clip !== 'full' && lv > 0) txt = 'ggf. ' + txt;
-      var rg = Math.round(g.tmin) === Math.round(g.tmax) ? fmt(g.tmin, 0) : fmt(g.tmin, 0) + ' bis ' + fmt(g.tmax, 0);
-      var det = 'Draußen ' + rg + ' °C · im Stall geschätzt ' + (g.night ? 'tiefstens ' : 'im Schnitt ') + fmt(eff, 0) + ' °C';
       html += '<div class="wxrow"><div class="l"><b>' + g.label + '</b></div><div class="r">' + txt + '</div><small>' + det + '</small></div>';
     });
     body.innerHTML = html;
