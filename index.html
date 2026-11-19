@@ -92,6 +92,9 @@
   .tab[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 
   @media (max-width: 520px) { .tiles .tile:nth-child(3) { grid-column: 1 / -1; } }
+  .tile.k { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 10px 16px; }
+  .tile.k .pill { margin-top: 0; }
+  .tile.k .note { margin-top: 0; }
   .modal { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 20px; background: rgba(0, 0, 0, .45); }
   .modal .box { background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 12px; padding: 20px; max-width: 340px; width: 100%; box-shadow: 0 10px 30px rgba(0, 0, 0, .3); }
   .modal .box p { margin: 8px 0 16px; }
@@ -226,7 +229,7 @@
   <section class="tiles" aria-label="Letzte Messung">
     <div class="tile t"><div class="lab">Temperatur</div><div class="val" id="vT">–</div><div class="note" id="nT"></div></div>
     <div class="tile h"><div class="lab">Luftfeuchte</div><div class="val" id="vH">–</div><div class="note" id="nH"></div></div>
-    <div class="tile"><div class="lab">Klima</div><span class="pill ok" id="pill">–</span><div class="note" id="nK"></div></div>
+    <div class="tile k"><div class="lab">Klima</div><span class="pill ok" id="pill">–</span><div class="note" id="nK"></div></div>
   </section>
 
   <section class="card" id="lastCard" hidden>
@@ -694,7 +697,7 @@
     else if (last.rh >= 70) k = ['warn', 'Feucht'];
     else k = ['ok', 'Normal'];
     pill.className = 'pill ' + k[0]; pill.textContent = k[1];
-    $('nK').textContent = d.demo ? 'Beispielwerte' : 'Einfacher Richtwert für die Feuchte (70 und 85 %)';
+    $('nK').textContent = d.demo ? 'Beispielwerte' : 'Feuchte-Richtwert 70 / 85 %';
     $('synced').textContent = d.demo ? '' : 'Letzte Messung ' + ago(last.ts) + ' · abgeholt ' + fmtDT(d.lastSync);
     $('synced').textContent += d.demo ? '' : batteryText(store.blankets[sel]);
   }
