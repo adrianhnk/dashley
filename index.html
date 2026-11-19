@@ -91,6 +91,11 @@
   body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 6px; background: var(--accent); z-index: 50; }
   .tab[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 
+  @media (max-width: 520px) { .tiles .tile:nth-child(3) { grid-column: 1 / -1; } }
+  .modal { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 20px; background: rgba(0, 0, 0, .45); }
+  .modal .box { background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 12px; padding: 20px; max-width: 340px; width: 100%; box-shadow: 0 10px 30px rgba(0, 0, 0, .3); }
+  .modal .box p { margin: 8px 0 16px; }
+
   /* Höchster und niedrigster Wert der letzten Auslesung */
   .mm { display: grid; grid-template-columns: auto 1fr 1fr; gap: 6px 14px; align-items: baseline; font-variant-numeric: tabular-nums; }
   .mm .h { font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
@@ -221,7 +226,6 @@
   <section class="tiles" aria-label="Letzte Messung">
     <div class="tile t"><div class="lab">Temperatur</div><div class="val" id="vT">–</div><div class="note" id="nT"></div></div>
     <div class="tile h"><div class="lab">Luftfeuchte</div><div class="val" id="vH">–</div><div class="note" id="nH"></div></div>
-    <div class="tile d"><div class="lab">Taupunkt</div><div class="val" id="vD">–</div><div class="note" id="nD"></div></div>
     <div class="tile"><div class="lab">Klima</div><span class="pill ok" id="pill">–</span><div class="note" id="nK"></div></div>
   </section>
 
@@ -246,8 +250,8 @@
   <div class="charts">
   <section class="card">
     <div class="head">
-      <h2>Temperatur und Taupunkt</h2>
-      <div class="legend"><span><i style="background:var(--c-temp)"></i>Temperatur</span><span><i style="background:var(--c-dew)"></i>Taupunkt</span></div>
+      <h2>Temperatur</h2>
+      <div class="legend"><span><i style="background:var(--c-temp)"></i>Temperatur</span></div>
     </div>
     <div class="chart" id="ch1"></div>
   </section>
@@ -268,7 +272,7 @@
     </div>
     <div class="tablewrap">
       <table id="tbl">
-        <thead><tr><th>Zeit</th><th class="num">Temp.<br>°C</th><th class="num">Feuchte<br>%</th><th class="num">Taupunkt<br>°C</th></tr></thead>
+        <thead><tr><th>Zeit</th><th class="num">Temp.<br>°C</th><th class="num">Feuchte<br>%</th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
@@ -459,7 +463,8 @@
     var added = mergeRecords(b, incoming, Math.max(h.interval, 30) * 500);
     if (added > 0 || b.prevSync == null) b.prevSync = b.lastSync || 0;   // Fenster der "letzten Auslesung"
     b.lastSync = Date.now();
-    if (h.mv >= 2500 && h.mv <= 5000) { b.vbat = h.mv / 1000; b.vbatTs = Date.now(); }
+    var batWarn = false;
+    if (h.mv >= 2500 && h.mv <= 5000) { b.vbat = h.mv / 1000; b.vbatTs = Date.now(); batWarn = batteryPct(b.vbat) <= BAT_WARN; }
     sel = h.name; store.sel = sel;
     saveStore();
     try { s.server.disconnect(); } catch (e) {}
@@ -469,6 +474,7 @@
       + (h.total != null ? ' (Decke: ' + h.total + ' Werte gespeichert' + (h.fails ? ', ' + h.fails + ' Sensor-Lesefehler' : '') + ')' : '')
       : n + ' Messwerte abgeholt, ' + added + ' neu.'), 'ok');
     render();
+    if (batWarn) batteryAlert(h.name, b.vbat, batteryPct(b.vbat));
   }
 
   function handleLine(line) {
@@ -600,7 +606,7 @@
     return { recs: demoRecords(), demo: true, intervalS: 3600, lastSync: 0 };
   }
   function enrich(recs) {
-    return recs.map(function (r) { return { ts: r.ts, t: r.t, rh: r.rh, td: dewPoint(r.t, r.rh) }; });
+    return recs.map(function (r) { return { ts: r.ts, t: r.t, rh: r.rh }; });
   }
   function ago(ts) {
     var m = Math.round((Date.now() - ts) / 60000);
@@ -637,9 +643,19 @@
     }
     return 100;
   }
+  var BAT_WARN = 25;   // Warnung ab diesem Akkustand (Prozent)
+  function batteryAlert(name, v, pct) {
+    var old = document.getElementById('batAlert'); if (old) old.remove();
+    var ov = document.createElement('div'); ov.className = 'modal'; ov.id = 'batAlert';
+    ov.innerHTML = '<div class="box" role="alertdialog" aria-modal="true" aria-labelledby="batT"><h2 id="batT">Akku bald leer</h2>'
+      + '<p>Der Akku von ' + slotLabel(name) + ' hat noch etwa ' + pct + ' % (' + fmt(v, 2) + ' V). Bitte bald laden.</p>'
+      + '<button class="btn primary" type="button">OK</button></div>';
+    ov.addEventListener('click', function (e) { if (e.target === ov || e.target.tagName === 'BUTTON') ov.remove(); });
+    document.body.appendChild(ov);
+  }
   function batteryText(b) {
     if (!b || !b.vbat) return '';
-    return ' · Akku ' + fmt(b.vbat, 2) + ' V (ca. ' + batteryPct(b.vbat) + ' %)' + (b.vbat < 3.6 ? ' – bald laden' : '');
+    return ' · Akku ' + fmt(b.vbat, 2) + ' V (ca. ' + batteryPct(b.vbat) + ' %)' + (batteryPct(b.vbat) <= BAT_WARN ? ' – bald laden' : '');
   }
 
   function renderTabs() {
@@ -663,7 +679,6 @@
     var last = recs[recs.length - 1];
     $('vT').innerHTML = fmt(last.t, 1) + '<small>°C</small>';
     $('vH').innerHTML = fmt(last.rh, 0) + '<small>%</small>';
-    $('vD').innerHTML = fmt(last.td, 1) + '<small>°C</small>';
     var inW = recs.filter(function (r) { return r.ts >= w.x0 && r.ts <= w.x1; });
     var label = range === 'all' ? 'gesamt' : $('chips').querySelector('[data-r="' + range + '"]').textContent;
     function span(key, dec, unit) {
@@ -674,7 +689,6 @@
     }
     $('nT').textContent = span('t', 1, '°C');
     $('nH').textContent = span('rh', 0, '%');
-    $('nD').textContent = span('td', 1, '°C');
     var pill = $('pill'), k;
     if (last.rh >= 85) k = ['bad', 'Sehr feucht'];
     else if (last.rh >= 70) k = ['warn', 'Feucht'];
@@ -701,7 +715,7 @@
     if (!batch.length) { $('lastInfo').textContent = ''; host.style.display = 'block'; host.textContent = 'Bei der letzten Auslesung kamen keine neuen Messwerte.'; return; }
     host.style.display = '';
     $('lastInfo').textContent = shortDT(batch[0].ts) + ' bis ' + shortDT(batch[batch.length - 1].ts) + ' · ' + batch.length + (batch.length === 1 ? ' Wert' : ' Werte');
-    var rows = [['Temperatur', 't', 1, '°C'], ['Luftfeuchte', 'rh', 0, '%'], ['Taupunkt', 'td', 1, '°C']];
+    var rows = [['Temperatur', 't', 1, '°C'], ['Luftfeuchte', 'rh', 0, '%']];
     var html = '<div class="h"></div><div class="h">Höchster</div><div class="h">Niedrigster</div>';
     rows.forEach(function (rw) {
       var hi = batch[0], lo = batch[0];
@@ -722,18 +736,22 @@
     for (var v = a; v <= b + step / 1000; v += step) out.push(Math.round(v * 1e6) / 1e6);
     return out;
   }
-  function timeTicks(x0, x1) {
-    var H = 3600e3, cands = [1, 2, 3, 6, 12, 24, 48, 96, 168], span = x1 - x0, step = cands[cands.length - 1] * H;
-    for (var i = 0; i < cands.length; i++) { if (span / (cands[i] * H) <= 6) { step = cands[i] * H; break; } }
+  // Beschriftung nur so dicht, dass nichts überlappt: bei mehr als 1,5 Tagen volle Tage mit Datum, sonst Uhrzeiten
+  function timeTicks(x0, x1, maxTicks) {
+    var H = 3600e3, span = x1 - x0, cands;
+    if (span <= 36 * H) cands = [1, 2, 3, 6, 12].map(function (h) { return h * H; });
+    else cands = [1, 2, 4, 7, 14, 30, 60, 120].map(function (d) { return d * 24 * H; });
+    var step = cands[cands.length - 1];
+    for (var i = 0; i < cands.length; i++) { if (span / cands[i] <= maxTicks) { step = cands[i]; break; } }
     var off = new Date(x0).getTimezoneOffset() * 60000, out = [];
     for (var v = Math.ceil((x0 - off) / step) * step + off; v <= x1; v += step) out.push(v);
     return { ticks: out, step: step, span: span };
   }
   function tickLabel(v, tt) {
-    var d = new Date(v);
-    if (tt.step >= 24 * 3600e3) return pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + '.';
-    if (tt.span <= 36 * 3600e3) return pad(d.getHours()) + ':' + pad(d.getMinutes());
-    return pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + '. ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+    var d = new Date(v), date = pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + '.';
+    if (tt.step >= 24 * 3600e3) return date;
+    if (d.getHours() === 0 && d.getMinutes() === 0) return date;
+    return pad(d.getHours()) + ':' + pad(d.getMinutes());
   }
 
   // o: { recs, series:[{key,color,fill}], x0, x1, gapMs, clamp:[lo,hi]|null, dec, unit, label }
@@ -757,7 +775,7 @@
     function sx(x) { return m.l + (x - o.x0) / (o.x1 - o.x0) * iw; }
     function sy(y) { return m.t + (1 - (y - y0) / (y1 - y0)) * ih; }
 
-    var tt = timeTicks(o.x0, o.x1), g = [];
+    var tt = timeTicks(o.x0, o.x1, Math.max(3, Math.floor(iw / 64))), g = [];
     yt.forEach(function (v) {
       var y = sy(v).toFixed(1);
       g.push('<line x1="' + m.l + '" x2="' + (W - m.r) + '" y1="' + y + '" y2="' + y + '" style="stroke:var(--line)" stroke-width="1"/>');
@@ -810,7 +828,7 @@
       var r = pts[i], x = sx(r.ts);
       cur.setAttribute('x1', x); cur.setAttribute('x2', x); cur.setAttribute('visibility', 'visible');
       o.series.forEach(function (s, k) { dots[k].setAttribute('cx', x); dots[k].setAttribute('cy', sy(r[s.key])); dots[k].setAttribute('visibility', 'visible'); });
-      tip.innerHTML = '<b>' + fmtDT(r.ts) + '</b><br>Temperatur ' + fmt(r.t, 1) + ' °C<br>Feuchte ' + fmt(r.rh, 0) + ' %<br>Taupunkt ' + fmt(r.td, 1) + ' °C';
+      tip.innerHTML = '<b>' + fmtDT(r.ts) + '</b><br>Temperatur ' + fmt(r.t, 1) + ' °C<br>Feuchte ' + fmt(r.rh, 0) + ' %';
       tip.hidden = false;
       var tw = tip.offsetWidth, left = x + 12;
       if (left + tw > W - 4) left = x - tw - 12;
@@ -825,8 +843,8 @@
   function renderCharts(d, recs, w) {
     var gapMs = Math.max(d.intervalS * 2500, 3 * 3600e3);
     drawChart($('ch1'), {
-      recs: recs, x0: w.x0, x1: w.x1, gapMs: gapMs, clamp: null, dec: 1, unit: '°C', label: 'Temperatur und Taupunkt im Zeitverlauf',
-      series: [{ key: 'td', color: 'var(--c-dew)' }, { key: 't', color: 'var(--c-temp)' }]
+      recs: recs, x0: w.x0, x1: w.x1, gapMs: gapMs, clamp: null, dec: 1, unit: '°C', label: 'Temperatur im Zeitverlauf',
+      series: [{ key: 't', color: 'var(--c-temp)' }]
     });
     drawChart($('ch2'), {
       recs: recs, x0: w.x0, x1: w.x1, gapMs: gapMs, clamp: [0, 100], dec: 0, unit: '%', label: 'Relative Luftfeuchte im Zeitverlauf',
@@ -843,11 +861,11 @@
     var body = document.querySelector('#tbl tbody');
     var pts = recs.filter(function (r) { return r.ts >= w.x0 && r.ts <= w.x1; });
     if (!pts.length) {
-      body.innerHTML = '<tr><td colspan="4">Im gewählten Zeitraum gibt es keine Messwerte.</td></tr>';
+      body.innerHTML = '<tr><td colspan="3">Im gewählten Zeitraum gibt es keine Messwerte.</td></tr>';
       $('tblInfo').textContent = ''; $('moreBtn').hidden = true; return;
     }
     var mn = {}, mx = {};
-    ['t', 'rh', 'td'].forEach(function (k) {
+    ['t', 'rh'].forEach(function (k) {
       var lo = Infinity, hi = -Infinity;
       pts.forEach(function (r) { var v = q1(r[k]); if (v < lo) lo = v; if (v > hi) hi = v; });
       mn[k] = lo; mx[k] = hi;
@@ -861,7 +879,7 @@
     shown.forEach(function (r) {
       var d = new Date(r.ts);
       html.push('<tr><td>' + pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + '. ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + '</td>' +
-        cell('t', r) + cell('rh', r) + cell('td', r) + '</tr>');
+        cell('t', r) + cell('rh', r) + '</tr>');
     });
     body.innerHTML = html.join('');
     $('tblInfo').textContent = shown.length + ' von ' + pts.length + ' Messwerten, neueste zuerst';
